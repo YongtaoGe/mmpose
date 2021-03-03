@@ -4,11 +4,11 @@ resume_from = None
 dist_params = dict(backend='nccl')
 workflow = [('train', 1)]
 checkpoint_config = dict(interval=10)
-evaluation = dict(interval=1, metric='mAP', key_indicator='AP')
+evaluation = dict(interval=10, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
     type='Adam',
-    lr=2e-2,
+    lr=5e-4,
 )
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -17,11 +17,13 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=0.001,
-    step=[170, 190, 200])
+    step=[170, 200])
 total_epochs = 210
 log_config = dict(
-    interval=50, hooks=[
+    interval=50,
+    hooks=[
         dict(type='TextLoggerHook'),
+        # dict(type='TensorboardLoggerHook')
     ])
 
 channel_cfg = dict(
@@ -37,39 +39,19 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained=None,
-    backbone=dict(
-        type='RSN',
-        unit_channels=256,
-        num_stages=1,
-        num_units=4,
-        num_blocks=[2, 2, 2, 2],
-        num_steps=4,
-        norm_cfg=dict(type='BN')),
+    pretrained='torchvision://resnet152',
+    backbone=dict(type='ResNet', depth=152),
     keypoint_head=dict(
-        type='TopDownMSMUHead',
-        out_shape=(64, 48),
-        unit_channels=256,
+        type='TopDownSimpleHead',
+        in_channels=2048,
         out_channels=channel_cfg['num_output_channels'],
-        num_stages=1,
-        num_units=4,
-        use_prm=False,
-        norm_cfg=dict(type='BN'),
-        loss_keypoint=[
-            dict(
-                type='JointsMSELoss', use_target_weight=True, loss_weight=0.25)
-        ] * 3 + [
-            dict(
-                type='JointsOHKMMSELoss',
-                use_target_weight=True,
-                loss_weight=1.)
-        ]),
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
     train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
-        post_process='megvii',
-        shift_heatmap=False,
-        modulate_kernel=5))
+        post_process='default',
+        shift_heatmap=True,
+        modulate_kernel=11))
 
 data_cfg = dict(
     image_size=[192, 256],
@@ -79,7 +61,6 @@ data_cfg = dict(
     dataset_channel=channel_cfg['dataset_channel'],
     inference_channel=channel_cfg['inference_channel'],
     soft_nms=False,
-    use_nms=False,
     nms_thr=1.0,
     oks_thr=0.9,
     vis_thr=0.2,
@@ -104,10 +85,7 @@ train_pipeline = [
         type='NormalizeTensor',
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225]),
-    dict(
-        type='TopDownGenerateTarget',
-        kernel=[(11, 11), (9, 9), (7, 7), (5, 5)],
-        encoding='Megvii'),
+    dict(type='TopDownGenerateTarget', sigma=2),
     dict(
         type='Collect',
         keys=['img', 'target', 'target_weight'],
@@ -127,9 +105,7 @@ val_pipeline = [
         std=[0.229, 0.224, 0.225]),
     dict(
         type='Collect',
-        keys=[
-            'img',
-        ],
+        keys=['img'],
         meta_keys=[
             'image_file', 'center', 'scale', 'rotation', 'bbox_score',
             'flip_pairs'
@@ -141,7 +117,7 @@ test_pipeline = val_pipeline
 data_root = 'data/coco'
 data = dict(
     samples_per_gpu=32,
-    workers_per_gpu=4,
+    workers_per_gpu=2,
     train=dict(
         type='TopDownCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_train2017.json',
