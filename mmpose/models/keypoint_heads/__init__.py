@@ -3,6 +3,7 @@ from .bottom_up_simple_head import BottomUpSimpleHead
 from .fc_head import FcHead
 from .top_down_multi_stage_head import TopDownMSMUHead, TopDownMultiStageHead
 from .top_down_simple_head import TopDownSimpleHead
+from .coord_pose_head import coord_pose_head
 
 __all__ = [
     'TopDownSimpleHead', 'TopDownMultiStageHead', 'TopDownMSMUHead',
