@@ -35,6 +35,8 @@ class MLP(nn.Module):
         for i, layer in enumerate(self.layers):
             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
+
+
 @HEADS.register_module()
 class coord_pose_head(nn.Module):
     """regression head with fully connected layers.
@@ -58,7 +60,7 @@ class coord_pose_head(nn.Module):
                  out_indices=(0, 1, 2, 3),
                  with_box_refine = True):
         super().__init__()
-        self.resnet_channel = {0:256,1:512,2:1024,3:2048}
+        self.backbone_out_channels = {0:256,1:256,2:256,3:256}
         self.num_level = len(out_indices)
 
         self.in_channels = in_channels
@@ -78,15 +80,26 @@ class coord_pose_head(nn.Module):
         for index in out_indices:
             self.input_proj.append(                
                     nn.Sequential(
-                    nn.Conv2d(self.resnet_channel[index], hidden_dim, kernel_size=1),
+                    nn.Conv2d(self.backbone_out_channels[index], hidden_dim, kernel_size=1),
                     nn.GroupNorm(32, hidden_dim),
                 ))
 
-        self.transformer = DeformableTransformer(d_model=self.hidden_dim,
-            nhead = 8, num_encoder_layers=3, num_decoder_layers=3, dim_feedforward=1024,
-            dropout=0.1, activation="relu", return_intermediate_dec=True,
-            num_feature_levels=self.num_level, dec_n_points=4, enc_n_points=4, 
-            two_stage=False, two_stage_num_proposals=1)
+        # self.decoder = build_neck(decoder_cfg)
+        self.transformer = DeformableTransformer(
+            d_model=self.hidden_dim,
+            nhead=8,
+            num_encoder_layers=3,
+            num_decoder_layers=6,
+            dim_feedforward=1024,
+            dropout=0.1,
+            activation="relu",
+            return_intermediate_dec=True,
+            num_feature_levels=self.num_level,
+            dec_n_points=4,
+            enc_n_points=4,
+            two_stage=False,
+            two_stage_num_proposals=1
+        )
 
         self.coord_embed = MLP(hidden_dim, hidden_dim, 2, 3)
         nn.init.constant_(self.coord_embed.layers[-1].weight.data, 0)
@@ -106,14 +119,24 @@ class coord_pose_head(nn.Module):
 
     def forward(self, x):
         """Forward function."""
-        assert len(x) == len(self.out_indices)
+        # import pdb
+        # pdb.set_trace()
+        #[
+        # [[2, 256, 8, 6],[2, 256, 8, 6],[2, 256, 8, 6],[2, 256, 8, 6]],
+        #]
+        # assert len(x) == len(self.out_indices)
+        if len(x)==1:
+            x = x[0]
+        else:
+            raise NotImplementedError
+
         pos = [self.position_embedding(feat) for feat in x]
-        feature = []
+        features = []
         for i in range(len(x)):
-            feature.append(self.input_proj[i](x[i]))
+            features.append(self.input_proj[i](x[i]))
         query_embed = self.query_embed.weight
         hs, init_reference, inter_references = \
-            self.transformer(feature, pos, query_embed)
+            self.transformer(features, pos, query_embed)
         
         outputs_coords = []
         for lvl in range(hs.shape[0]):
@@ -125,8 +148,6 @@ class coord_pose_head(nn.Module):
             # outputs_class = self.class_embed[lvl](hs[lvl])
 
             tmp = self.coord_embed[lvl](hs[lvl])
-            # import pdb
-            # pdb.set_trace()
             # debug_tmp.append(tmp)
             if reference.shape[-1] == 4:
                 tmp += reference
@@ -138,7 +159,9 @@ class coord_pose_head(nn.Module):
             outputs_coords.append(outputs_coord)
         # outputs_class = torch.stack(outputs_classes)
         outputs_coord = torch.stack(outputs_coords)
-        outputs_coord = outputs_coord[-1]
+        # import pdb
+        # pdb.set_trace()
+        # outputs_coord = outputs_coord[-1]
         # N, C = output.shape
         return outputs_coord
 
@@ -150,17 +173,24 @@ class coord_pose_head(nn.Module):
             num_keypoints: K
 
         Args:
-            output (torch.Tensor[N, K, 2]): Output keypoints.
+            output (torch.Tensor[num_layers, N, K, 2]): Output keypoints.
             target (torch.Tensor[N, K, 2]): Target keypoints.
             target_weight (torch.Tensor[N, K, 2]):
                 Weights across different joint types.
         """
-
         losses = dict()
         assert not isinstance(self.loss, nn.Sequential)
         assert target.dim() == 3 and target_weight.dim() == 3
-        losses['reg_loss'] = self.loss(output, target, target_weight)
+        losses['reg_loss'] = 0
 
+        if output.dim() == 4:
+            num_decode_layers = output.size(0)
+            for i in range(num_decode_layers):
+                losses['reg_loss'] += self.loss(output[i], target, target_weight)
+            # import pdb
+            # pdb.set_trace()
+        else:
+            losses['reg_loss'] = self.loss(output, target, target_weight)
         return losses
 
     def get_accuracy(self, output, target, target_weight):
@@ -178,7 +208,8 @@ class coord_pose_head(nn.Module):
         """
 
         accuracy = dict()
-
+        if output.dim() == 4:
+            output = output[-1]
         N = output.shape[0]
 
         _, avg_acc, cnt = keypoint_pck_accuracy(
@@ -203,6 +234,8 @@ class coord_pose_head(nn.Module):
                 Pairs of keypoints which are mirrored.
         """
         output = self.forward(x)
+        if output.dim() == 4:
+            output = output[-1]
 
         if flip_pairs is not None:
             output_regression = fliplr_regression(

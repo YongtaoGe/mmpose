@@ -1,1 +1,1 @@
-./tools/dist_train.sh configs/top_down/coord_pose/coco/res50_coco_256x192.py 2
+bash ./tools/dist_train.sh configs/top_down/coord_pose/coco/rsn18_coco_256x192.py 1

@@ -597,7 +597,6 @@ class RSN(BaseBackbone):
         for i in range(self.num_stages):
             out, skip1, skip2, x = self.multi_stage_rsn[i](x, skip1, skip2)
             out_feats.append(out)
-
         return out_feats
 
     def init_weights(self, pretrained=None):

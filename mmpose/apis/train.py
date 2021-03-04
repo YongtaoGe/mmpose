@@ -29,6 +29,8 @@ def train_model(model,
         meta (dict | None): Meta dict to record some important information.
             Default: None
     """
+    # import pdb
+    # pdb.set_trace()
     logger = get_root_logger(cfg.log_level)
 
     # prepare data loaders

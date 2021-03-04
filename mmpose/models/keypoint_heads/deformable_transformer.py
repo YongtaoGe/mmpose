@@ -164,11 +164,11 @@ class DeformableTransformer(nn.Module):
                         dtype=torch.float, device=src_flatten.device)
         # encoder
         # torch.Size([bs, 65, 256])
-        memory = self.encoder(src_flatten, spatial_shapes,
-                              level_start_index, valid_ratios,
-                              lvl_pos_embed_flatten)
-        # import pdb
-        # pdb.set_trace()
+        # memory = self.encoder(src_flatten, spatial_shapes,
+        #                       level_start_index, valid_ratios,
+        #                       lvl_pos_embed_flatten)
+
+        memory = src_flatten
         # prepare input for decoder
         bs, _, c = memory.shape
         if self.two_stage:
