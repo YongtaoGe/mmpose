@@ -7,13 +7,26 @@ checkpoint_config = dict(interval=10)
 evaluation = dict(interval=1, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
-    type='Adam',
-    lr=2e-2,
-    weight_decay=0.0001,
-    paramwise_cfg=dict(
-        custom_keys={'transformer': dict(lr_mult=0.1, decay_mult=1.0)})
+    type='AdamW',
+    lr=2e-3,
+    weight_decay=1e-5,
+    paramwise_cfg = dict(
+        custom_keys={
+            'transformer': dict(lr_mult=0.1, decay_mult=1.0),
+            # 'query_embed': dict(lr_mult=0.1, decay_mult=1.0),
+        },
+        # bypass_duplicate=True
+    )
 )
-optimizer_config = dict(grad_clip=None)
+
+optimizer_config = dict(grad_clip=None,
+                        paramwise_cfg=dict(
+                            custom_keys={
+                                'transformer': dict(grad_clip=dict(max_norm=0.1, norm_type=2)),
+                                # 'query_embed': dict(lr_mult=0.1, decay_mult=1.0),
+                            },
+                        )
+                    )
 
 # optimizer
 # optimizer = dict(
@@ -29,7 +42,7 @@ optimizer_config = dict(grad_clip=None)
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=2400,
     warmup_ratio=0.001,
     step=[170, 190, 200])
 total_epochs = 210
@@ -64,7 +77,8 @@ model = dict(
         type='coord_pose_head',
         in_channels=2048,
         num_joints=channel_cfg['num_output_channels'],
-        loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
+        # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
+        loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=1000),
         out_indices=(0, 1, 2, 3)),
 
     # keypoint_head=dict(
@@ -106,10 +120,11 @@ data_cfg = dict(
     nms_thr=1.0,
     oks_thr=0.9,
     vis_thr=0.2,
-    use_gt_bbox=False,
+    use_gt_bbox=True,
     det_bbox_thr=0.0,
-    bbox_file='data/coco/person_detection_results/'
-    'COCO_val2017_detections_AP_H_56_person.json',
+    bbox_file='',
+    # bbox_file='data/coco/person_detection_results/'
+    # 'COCO_val2017_detections_AP_H_56_person.json',
 )
 
 train_pipeline = [

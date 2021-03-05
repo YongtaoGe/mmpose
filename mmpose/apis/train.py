@@ -2,7 +2,7 @@ import torch
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import DistSamplerSeedHook, EpochBasedRunner, OptimizerHook
 
-from mmpose.core import (DistEvalHook, EvalHook, Fp16OptimizerHook,
+from mmpose.core import (DistEvalHook, EvalHook, Fp16OptimizerHook, ParamwiseOptimizerHook,
                          build_optimizers)
 from mmpose.core.distributed_wrapper import DistributedDataParallelWrapper
 from mmpose.datasets import build_dataloader, build_dataset
@@ -98,7 +98,11 @@ def train_model(model,
             optimizer_config = Fp16OptimizerHook(
                 **cfg.optimizer_config, **fp16_cfg, distributed=distributed)
         elif distributed and 'type' not in cfg.optimizer_config:
-            optimizer_config = OptimizerHook(**cfg.optimizer_config)
+            paramwise_cfg = cfg.optimizer_config.pop('paramwise_cfg', None)
+            import pdb
+            pdb.set_trace()
+            optimizer_config = ParamwiseOptimizerHook(**cfg.optimizer_config, paramwise_cfg)
+            # optimizer_config = OptimizerHook(**cfg.optimizer_config)
         else:
             optimizer_config = cfg.optimizer_config
 

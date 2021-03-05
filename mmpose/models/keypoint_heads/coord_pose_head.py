@@ -110,12 +110,12 @@ class coord_pose_head(nn.Module):
             self.coord_embed = _get_clones(self.coord_embed, num_pred)
             nn.init.constant_(self.coord_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
-            self.transformer.decoder.coord_embed = self.coord_embed
+            # self.transformer.decoder.coord_embed = self.coord_embed
         else:
             nn.init.constant_(self.coord_embed.layers[-1].bias.data[2:], -2.0)
             # self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.coord_embed = nn.ModuleList([self.coord_embed for _ in range(num_pred)])
-            self.transformer.decoder.coord_embed = None
+            # self.transformer.decoder.coord_embed = None
 
     def forward(self, x):
         """Forward function."""
