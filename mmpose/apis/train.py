@@ -99,9 +99,9 @@ def train_model(model,
                 **cfg.optimizer_config, **fp16_cfg, distributed=distributed)
         elif distributed and 'type' not in cfg.optimizer_config:
             paramwise_cfg = cfg.optimizer_config.pop('paramwise_cfg', None)
-            import pdb
-            pdb.set_trace()
-            optimizer_config = ParamwiseOptimizerHook(**cfg.optimizer_config, paramwise_cfg)
+            # import pdb
+            # pdb.set_trace()
+            optimizer_config = ParamwiseOptimizerHook(paramwise_cfg, **cfg.optimizer_config)
             # optimizer_config = OptimizerHook(**cfg.optimizer_config)
         else:
             optimizer_config = cfg.optimizer_config

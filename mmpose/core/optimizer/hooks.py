@@ -22,7 +22,7 @@ class ParamwiseOptimizerHook(OptimizerHook):
         loss_scale (float): Scale factor multiplied with loss.
     """
 
-    def __init__(self, grad_clip=None, paramwise_cfg=None):
+    def __init__(self, paramwise_cfg=None, grad_clip=None):
         self.grad_clip = grad_clip
         self.paramwise_cfg = paramwise_cfg
 
@@ -34,37 +34,46 @@ class ParamwiseOptimizerHook(OptimizerHook):
                 break
         return out
 
-    def clip_grads(self, named_params):
-        import pdb
-        pdb.set_trace()
+    def clip_grads(self, model):
+        grad_norm_dict = {}
+        param_name_list = []
         if self.paramwise_cfg is not None and 'custom_keys' in self.paramwise_cfg:
-            for param_name, grad_clip in self.paramwise_cfg['custom_keys']:
+            # [print(param_name) for param_name, grad_clip in self.paramwise_cfg['custom_keys']]
+            for param_name, grad_clip in self.paramwise_cfg['custom_keys'].items():
+                param_name_list.append(param_name)
                 params = []
-                for n, p in named_params:
-                    if self.match_name_keywords(n, param_name) and p.requires_grad:
+                for n, p in model.named_parameters():
+                    if self.match_name_keywords(n, [param_name]) and p.requires_grad:
                         params.append(p)
-                        named_params.pop(n)
+                        # named_params.pop(n)
                 if len(params) > 0:
-                    clip_grad.clip_grad_norm_(params, **grad_clip)
+                    key = param_name+'_grad_norm'
+                    grad_norm_dict[key] = float(clip_grad.clip_grad_norm_(params, **grad_clip['grad_clip']))
 
+        if self.grad_clip is not None:
+            rest_params = []
+            for n, p in model.named_parameters():
+                if p.requires_grad and not self.match_name_keywords(n, param_name_list):
+                    rest_params.append(p)
 
-        rest_params = []
-        for n, p in named_params:
-            if p.requires_grad:
-                rest_params.append(p)
+            if len(rest_params) > 0:
+                grad_norm_dict['rest_params_grad_norm'] = float(clip_grad.clip_grad_norm_(rest_params, **self.grad_clip))
 
-        if len(rest_params) > 0:
-            return clip_grad.clip_grad_norm_(rest_params, **self.grad_clip)
+        # import pdb
+        # pdb.set_trace()
+        # total_params = [n for n, p in model.named_parameters()]
+        # len(total_params) == len(params) + len(rest_params)
+
+        return grad_norm_dict
 
     def after_train_iter(self, runner):
         runner.optimizer.zero_grad()
         runner.outputs['loss'].backward()
-        if self.grad_clip is not None:
-            grad_norm = self.clip_grads(runner.model.named_parameters())
-            if grad_norm is not None:
-                # Add grad norm to the logger
-                runner.log_buffer.update({'grad_norm': float(grad_norm)},
-                                         runner.outputs['num_samples'])
+        grad_norm_dict = self.clip_grads(runner.model)
+        if len(grad_norm_dict) > 0:
+            # Add grad norm to the logger
+            runner.log_buffer.update(grad_norm_dict,
+                                     runner.outputs['num_samples'])
         runner.optimizer.step()
 
 

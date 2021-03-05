@@ -20,6 +20,7 @@ optimizer = dict(
 )
 
 optimizer_config = dict(grad_clip=None,
+                        # grad_clip=dict(max_norm=5, norm_type=2),
                         paramwise_cfg=dict(
                             custom_keys={
                                 'transformer': dict(grad_clip=dict(max_norm=0.1, norm_type=2)),
