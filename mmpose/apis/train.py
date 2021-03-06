@@ -52,6 +52,40 @@ def train_model(model,
     # determine wether use adversarial training precess or not
     use_adverserial_train = cfg.get('use_adversarial_train', False)
 
+
+
+#######################
+    def match_name_keywords(n, name_keywords):
+        out = False
+        for b in name_keywords:
+            if b in n:
+                out = True
+                break
+        return out
+
+    # model_without_ddp = model
+    # param_dicts = [
+    #     {
+    #         "params": [p for n, p in model_without_ddp.named_parameters() if
+    #                    match_name_keywords(n, ['transformer']) and p.requires_grad],
+    #         "lr": 0.001,
+    #     },
+    #     # 剩下的upsample
+    #     {
+    #         "params":
+    #             [p for n, p in model_without_ddp.named_parameters()
+    #              if not match_name_keywords(n, ['transformer']) and
+    #              p.requires_grad],
+    #         "lr": 0.01,
+    #     },
+    #
+    # ]
+    # # optimizer = make_optimizer(cfg, model, num_gpu)
+    # optimizer = torch.optim.AdamW(param_dicts, lr=0.01,
+    #                               weight_decay=1e-5)
+
+
+
     # put model on gpus
     if distributed:
         find_unused_parameters = cfg.get('find_unused_parameters', True)
@@ -77,6 +111,31 @@ def train_model(model,
 
     # build runner
     optimizer = build_optimizers(model, cfg.optimizer)
+
+    # with open('net_param.txt', 'wt') as f:
+    #     [print(n, file=f) for n, p in model.named_parameters() if "backbone" in n]
+    #
+    # import pdb
+    # pdb.set_trace()
+    #
+    # trans_count = 0
+    # rest_count = 0
+    # import pdb
+    # pdb.set_trace()
+    #
+    # for i in range(len(optimizer.param_groups)):
+    #     if optimizer.param_groups[i]['lr'] == 0.0004:
+    #         trans_count += 1
+    #     if optimizer.param_groups[i]['lr'] == 0.004:
+    #         rest_count += 1
+    #
+    # print(trans_count, rest_count)
+    # import pdb
+    # pdb.set_trace()
+    # # len(aa)==171
+    # aa = [n for n, p in model.named_parameters() if 'transformer' in n]
+    #######################
+
 
     runner = EpochBasedRunner(
         model,

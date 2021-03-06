@@ -132,12 +132,13 @@ class TopDown(BasePose):
     def forward_train(self, img, target, target_weight, img_metas, **kwargs):
         """Defines the computation performed at every call when training."""
         output = self.backbone(img)
-        # import pdb
-        # pdb.set_trace()
+
         if self.with_neck:
             output = self.neck(output)
         if self.with_keypoint:
             output = self.keypoint_head(output)
+        # import pdb
+        # pdb.set_trace()
 
         # if return loss
         losses = dict()

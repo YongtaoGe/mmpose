@@ -43,6 +43,8 @@ class ParamwiseOptimizerHook(OptimizerHook):
                 param_name_list.append(param_name)
                 params = []
                 for n, p in model.named_parameters():
+                    #keypoint_head.query_embed.weight
+                    # if self.match_name_keywords(n, [param_name]) and not self.match_name_keywords(n, ["query_embed"]) and p.requires_grad:
                     if self.match_name_keywords(n, [param_name]) and p.requires_grad:
                         params.append(p)
                         # named_params.pop(n)
@@ -59,6 +61,9 @@ class ParamwiseOptimizerHook(OptimizerHook):
             if len(rest_params) > 0:
                 grad_norm_dict['rest_params_grad_norm'] = float(clip_grad.clip_grad_norm_(rest_params, **self.grad_clip))
 
+
+        # [print(n) for n, p in model.named_parameters() if self.match_name_keywords(n, [param_name]) and p.requires_grad]
+        #
         # import pdb
         # pdb.set_trace()
         # total_params = [n for n, p in model.named_parameters()]

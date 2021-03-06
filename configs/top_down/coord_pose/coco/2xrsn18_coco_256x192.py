@@ -69,7 +69,7 @@ model = dict(
     backbone=dict(
         type='RSN',
         unit_channels=256,
-        num_stages=1,
+        num_stages=2,
         num_units=4,
         num_blocks=[2, 2, 2, 2],
         num_steps=4,
@@ -85,7 +85,7 @@ model = dict(
         num_encoder_layers=0,
         num_decoder_layers=6,
         with_box_refine=True,
-        num_stages=1,
+        num_stages=2,
     ),
     train_cfg=dict(),
     test_cfg = dict(

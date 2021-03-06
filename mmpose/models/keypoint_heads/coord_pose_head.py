@@ -22,23 +22,9 @@ def inverse_sigmoid(x, eps=1e-5):
     x2 = (1 - x).clamp(min=eps)
     return torch.log(x1/x2)
 
-class MLP(nn.Module):
-    """ Very simple multi-layer perceptron (also called FFN)"""
-
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super().__init__()
-        self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
-
 
 @HEADS.register_module()
-class coord_pose_head(nn.Module):
+class TransHead(nn.Module):
     """regression head with fully connected layers.
 
     paper ref: Alexander Toshev and Christian Szegedy,
@@ -56,15 +42,21 @@ class coord_pose_head(nn.Module):
                  loss_keypoint=None,
                  train_cfg=None,
                  test_cfg=None,
-                 hidden_dim = 256,
+                 hidden_dim=256,
                  out_indices=(0, 1, 2, 3),
-                 with_box_refine = True):
+                 with_box_refine=True,
+                 num_encoder_layers=0,
+                 num_decoder_layers=6,
+                 num_stages=1,
+                 ):
         super().__init__()
         self.backbone_out_channels = {0:256,1:256,2:256,3:256}
+        self.out_indices = out_indices
         self.num_level = len(out_indices)
-
+        self.num_stages = num_stages
         self.in_channels = in_channels
         self.num_joints = num_joints
+        self.num_decoder_layers = num_decoder_layers
 
         self.loss = build_loss(loss_keypoint)
 
@@ -73,81 +65,99 @@ class coord_pose_head(nn.Module):
 
         self.hidden_dim = hidden_dim
         self.position_embedding = PositionEmbeddingSine(hidden_dim//2, normalize=True)
-        self.out_indices = out_indices
+        self.query_embed = nn.Embedding(self.num_joints, hidden_dim * 2)
 
-        self.query_embed = nn.Embedding(self.num_joints, hidden_dim*2)
-        self.input_proj = nn.ModuleList()
-        for index in out_indices:
-            self.input_proj.append(                
-                    nn.Sequential(
-                    nn.Conv2d(self.backbone_out_channels[index], hidden_dim, kernel_size=1),
-                    nn.GroupNorm(32, hidden_dim),
-                ))
+        transformer_modules = []
+        for i in range(num_stages):
+            transformer_modules.append(
+                    DeformableTransformer(
+                    d_model=self.hidden_dim,
+                    nhead=8,
+                    num_encoder_layers=num_encoder_layers,
+                    num_decoder_layers=num_decoder_layers,
+                    dim_feedforward=1024,
+                    dropout=0.1,
+                    activation="relu",
+                    return_intermediate_dec=True,
+                    num_feature_levels=self.num_level,
+                    dec_n_points=4,
+                    enc_n_points=4,
+                    hidden_dim=hidden_dim,
+                    with_box_refine=with_box_refine,
+                    two_stage=False,
+                    two_stage_num_proposals=1
+                )
+            )
+        self.transformer = nn.Sequential(*transformer_modules)
 
-        # self.decoder = build_neck(decoder_cfg)
-        self.transformer = DeformableTransformer(
-            d_model=self.hidden_dim,
-            nhead=8,
-            num_encoder_layers=3,
-            num_decoder_layers=6,
-            dim_feedforward=1024,
-            dropout=0.1,
-            activation="relu",
-            return_intermediate_dec=True,
-            num_feature_levels=self.num_level,
-            dec_n_points=4,
-            enc_n_points=4,
-            two_stage=False,
-            two_stage_num_proposals=1
-        )
-
-        self.coord_embed = MLP(hidden_dim, hidden_dim, 2, 3)
-        nn.init.constant_(self.coord_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.coord_embed.layers[-1].bias.data, 0)
-        num_pred = self.transformer.decoder.num_layers
-        if with_box_refine:
-            # self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.coord_embed = _get_clones(self.coord_embed, num_pred)
-            nn.init.constant_(self.coord_embed[0].layers[-1].bias.data[2:], -2.0)
-            # hack implementation for iterative bounding box refinement
-            # self.transformer.decoder.coord_embed = self.coord_embed
-        else:
-            nn.init.constant_(self.coord_embed.layers[-1].bias.data[2:], -2.0)
-            # self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
-            self.coord_embed = nn.ModuleList([self.coord_embed for _ in range(num_pred)])
-            # self.transformer.decoder.coord_embed = None
-
-    def forward(self, x):
+    def forward(self, feat_for_all_stages):
         """Forward function."""
-        # import pdb
-        # pdb.set_trace()
         #[
-        # [[2, 256, 8, 6],[2, 256, 8, 6],[2, 256, 8, 6],[2, 256, 8, 6]],
+        # [[2, 256, 8, 6],[2, 256, 16, 12],[2, 256, 32, 24],[2, 256, 64, 48]],
         #]
-        # assert len(x) == len(self.out_indices)
-        if len(x)==1:
-            x = x[0]
-        else:
-            raise NotImplementedError
-
-        pos = [self.position_embedding(feat) for feat in x]
-        features = []
-        for i in range(len(x)):
-            features.append(self.input_proj[i](x[i]))
-        query_embed = self.query_embed.weight
-        hs, init_reference, inter_references = \
-            self.transformer(features, pos, query_embed)
-        
+        # assert len(x) == len
         outputs_coords = []
+        hs_for_all_stages, inter_references_for_all_stages = [], []
+
+        for stage_i, feat_for_one_stage in enumerate(feat_for_all_stages):
+            pos_embeds_for_one_stage = [self.position_embedding(feat) for feat in feat_for_one_stage]
+            feat_for_one_stage = feat_for_one_stage[::-1]
+            pos_embeds_for_one_stage = pos_embeds_for_one_stage[::-1]
+
+            query_embed = self.query_embed.weight
+            if stage_i == 0:
+                hs, init_reference, inter_references = \
+                    self.transformer[stage_i](feat_for_one_stage, pos_embeds_for_one_stage, query_embed)
+            else:
+                src_flatten = []
+                spatial_shapes = []
+                for lvl, (src, pos_embed) in enumerate(zip(feat_for_one_stage, pos_embeds_for_one_stage)):
+                    bs, c, h, w = src.shape
+                    spatial_shape = (h, w)
+                    spatial_shapes.append(spatial_shape)
+                    src = src.flatten(2).transpose(1, 2)
+                    src_flatten.append(src)
+                    # pos_embed = pos_embed.flatten(2).transpose(1, 2)
+                src_flatten = torch.cat(src_flatten, 1)
+                spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
+                level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+                valid_ratios = torch.ones([src_flatten.size(0), self.num_level, 2],
+                                          dtype=torch.float, device=src_flatten.device)
+
+
+                bs, _, c = src_flatten.shape
+                # torch.Size([17, 512]) -> torch.Size([17, 256]) and torch.Size([17, 256])
+                query_embed_i, tgt_i = torch.split(query_embed, c, dim=1)
+                # torch.Size([17, 256]) -> torch.Size([bs, 17, 256])
+                query_embed_i = query_embed_i.unsqueeze(0).expand(bs, -1, -1)
+
+                hs, inter_references = \
+                    self.transformer[stage_i].decoder(
+                        hs[-1],
+                        inter_references[-1],
+                        src_flatten,
+                        spatial_shapes,
+                        level_start_index,
+                        valid_ratios,
+                        query_embed_i,
+                        )
+
+            hs_for_all_stages.append(hs)
+            inter_references_for_all_stages.append(inter_references)
+
+        hs = torch.cat(hs_for_all_stages, 0)
+        inter_references = torch.cat(inter_references_for_all_stages, 0)
+
         for lvl in range(hs.shape[0]):
+            stage_i = lvl // self.num_decoder_layers
+            stage_lvl = lvl % self.num_decoder_layers
             if lvl == 0:
                 reference = init_reference
             else:
                 reference = inter_references[lvl - 1]
             reference = inverse_sigmoid(reference)
             # outputs_class = self.class_embed[lvl](hs[lvl])
-
-            tmp = self.coord_embed[lvl](hs[lvl])
+            tmp = self.transformer[stage_i].decoder.coord_embed[stage_lvl](hs[lvl])
             # debug_tmp.append(tmp)
             if reference.shape[-1] == 4:
                 tmp += reference
@@ -157,12 +167,12 @@ class coord_pose_head(nn.Module):
             outputs_coord = tmp.sigmoid()
             # outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
+
         # outputs_class = torch.stack(outputs_classes)
         outputs_coord = torch.stack(outputs_coords)
-        # import pdb
-        # pdb.set_trace()
         # outputs_coord = outputs_coord[-1]
         # N, C = output.shape
+
         return outputs_coord
 
     def get_loss(self, output, target, target_weight):
@@ -181,16 +191,32 @@ class coord_pose_head(nn.Module):
         losses = dict()
         assert not isinstance(self.loss, nn.Sequential)
         assert target.dim() == 3 and target_weight.dim() == 3
+        # import pdb
+        # pdb.set_trace()
         losses['reg_loss'] = 0
-
         if output.dim() == 4:
             num_decode_layers = output.size(0)
             for i in range(num_decode_layers):
-                losses['reg_loss'] += self.loss(output[i], target, target_weight)
-            # import pdb
-            # pdb.set_trace()
+                losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
         else:
             losses['reg_loss'] = self.loss(output, target, target_weight)
+        #
+        # ############
+        #     if isinstance(self.loss, nn.Sequential):
+        #         assert len(self.loss) == len(output)
+        #     for i in range(len(output)):
+        #         target_i = target
+        #         target_weight_i = target_weight
+        #         if isinstance(self.loss, nn.Sequential):
+        #             loss_func = self.loss[i]
+        #         else:
+        #             loss_func = self.loss
+        #         loss_i = loss_func(output[i], target_i, target_weight_i)
+        #         if 'reg_loss' not in losses:
+        #             losses['reg_loss'] = loss_i
+        #         else:
+        #             losses['reg_loss'] += loss_i
+
         return losses
 
     def get_accuracy(self, output, target, target_weight):
@@ -302,5 +328,10 @@ class coord_pose_head(nn.Module):
         return result
 
     def init_weights(self):
-        # normal_init(self.fc, mean=0, std=0.01, bias=0)
-        pass
+        for i in range(len(self.transformer)):
+            # import pdb
+            # pdb.set_trace()
+            for j in range(len(self.transformer[i].decoder.coord_embed)):
+                nn.init.constant_(self.transformer[i].decoder.coord_embed[j].layers[-1].weight.data, 0)
+                nn.init.constant_(self.transformer[i].decoder.coord_embed[j].layers[-1].bias.data, 0)
+            nn.init.constant_(self.transformer[i].decoder.coord_embed[0].layers[-1].bias.data[2:], -2.0)
