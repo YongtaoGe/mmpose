@@ -68,16 +68,9 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained=None,
-    backbone=dict(
-        type='RSN',
-        unit_channels=256,
-        num_stages=1,
-        num_units=4,
-        num_blocks=[2, 2, 2, 2],
-        num_steps=4,
-        norm_cfg=dict(type='BN')),
-    # neck=dict(type='InputProj', in_channals=(256, 256, 256, 256), out_channal = 256),
+    pretrained='torchvision://resnet50',
+    backbone=dict(type='ResNet', depth=50, num_stages=4, out_indices=(0, 1, 2, 3)),
+    neck=dict(type='InputProj', in_channals=(256, 512, 1024, 2048), out_channal = 256),
     keypoint_head=dict(
         type='TransHead',
         num_joints=channel_cfg['num_output_channels'],

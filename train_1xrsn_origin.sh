@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1,2,3 PORT=29501 ./tools/dist_train.sh configs/top_down/rsn/coco/rsn18_coco_256x192.py 1

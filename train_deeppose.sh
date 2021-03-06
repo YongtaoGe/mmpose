@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=2,3 PORT=11117 ./tools/dist_train.sh configs/top_down/deeppose/coco/deeppose_res50_coco_256x192.py 1

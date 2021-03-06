@@ -101,6 +101,22 @@ def main():
     model.forward = model.forward_dummy
 
     dump_input = torch.rand(input_shape).cuda()
+    # import pdb
+    # pdb.set_trace()
+
+    # export_onnx_file = "rsn.onnx"  # 目的ONNX文件名
+    #
+    # torch.onnx.export(model,
+    #                   dump_input,
+    #                   export_onnx_file,
+    #                   opset_version=11,
+    #                   do_constant_folding=True,  # 是否执行常量折叠优化
+    #                   input_names=["input"],  # 输入名
+    #                   output_names=["output"],  # 输出名
+    #                   dynamic_axes={"input": {0: "batch_size"},  # 批处理变量
+    #                                 "output": {0: "batch_size"}})
+
+
     flop_dict1, _ = flop_count(model, (dump_input,), supported_ops=custom_ops)
     print(flop_dict1)
 

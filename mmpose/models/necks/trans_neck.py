@@ -28,12 +28,8 @@ class InputProj(nn.Module):
             nn.init.constant_(proj[0].bias, 0)
 
     def forward(self, inputs):
-        if len(inputs)==1:
-            inputs = inputs[0]
-        else:
-            raise NotImplementedError
-
+        assert len(inputs) == len(self.input_proj)
         out_list = []
         for i, feat in enumerate(inputs):
             out_list.append(self.input_proj[i](feat))
-        return out_list
+        return [out_list]

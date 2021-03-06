@@ -62,8 +62,11 @@ class L1Loss(nn.Module):
         """
         num_joints = output.size(1)
         if self.use_target_weight:
+            # loss = self.criterion(output * target_weight,
+            #                       target * target_weight, reduction='none')
             loss = self.criterion(output * target_weight,
-                                  target * target_weight, reduction='none')
+                                  target * target_weight)
+
         else:
             loss = self.criterion(output, target)
 

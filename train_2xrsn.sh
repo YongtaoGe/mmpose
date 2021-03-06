@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0,1,2,3 MASTER_PORT=21519 ./tools/dist_train.sh configs/top_down/coord_pose/coco/2xrsn18_coco_256x192.py 1

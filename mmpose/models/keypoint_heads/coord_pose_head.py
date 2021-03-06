@@ -50,7 +50,7 @@ class TransHead(nn.Module):
                  num_stages=1,
                  ):
         super().__init__()
-        self.backbone_out_channels = {0:256,1:256,2:256,3:256}
+        self.backbone_out_channels = {0:256, 1:256, 2:256, 3:256}
         self.out_indices = out_indices
         self.num_level = len(out_indices)
         self.num_stages = num_stages
@@ -64,7 +64,7 @@ class TransHead(nn.Module):
         self.test_cfg = {} if test_cfg is None else test_cfg
 
         self.hidden_dim = hidden_dim
-        self.position_embedding = PositionEmbeddingSine(hidden_dim//2, normalize=True)
+        self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
         self.query_embed = nn.Embedding(self.num_joints, hidden_dim * 2)
 
         transformer_modules = []
@@ -93,9 +93,11 @@ class TransHead(nn.Module):
     def forward(self, feat_for_all_stages):
         """Forward function."""
         #[
-        # [[2, 256, 8, 6],[2, 256, 16, 12],[2, 256, 32, 24],[2, 256, 64, 48]],
+        # [[2, 256, 8, 6], [2, 256, 16, 12], [2, 256, 32, 24], [2, 256, 64, 48]],
         #]
         # assert len(x) == len
+        # import pdb
+        # pdb.set_trace()
         outputs_coords = []
         hs_for_all_stages, inter_references_for_all_stages = [], []
 
@@ -193,11 +195,13 @@ class TransHead(nn.Module):
         assert target.dim() == 3 and target_weight.dim() == 3
         # import pdb
         # pdb.set_trace()
-        losses['reg_loss'] = 0
+        # losses['reg_loss'] = self.loss(output[-1], target, target_weight).sum()
+        losses['reg_loss'] = self.loss(output[-1], target, target_weight)
         if output.dim() == 4:
             num_decode_layers = output.size(0)
-            for i in range(num_decode_layers):
-                losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+            for i in range(num_decode_layers-1):
+                # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                losses['reg_loss'] += self.loss(output[i], target, target_weight)
         else:
             losses['reg_loss'] = self.loss(output, target, target_weight)
         #
@@ -332,6 +336,9 @@ class TransHead(nn.Module):
             # import pdb
             # pdb.set_trace()
             for j in range(len(self.transformer[i].decoder.coord_embed)):
+                normal_init(self.transformer[i].decoder.coord_embed[j].layers[0], mean=0, std=0.01, bias=0)
+                normal_init(self.transformer[i].decoder.coord_embed[j].layers[1], mean=0, std=0.01, bias=0)
+
                 nn.init.constant_(self.transformer[i].decoder.coord_embed[j].layers[-1].weight.data, 0)
                 nn.init.constant_(self.transformer[i].decoder.coord_embed[j].layers[-1].bias.data, 0)
             nn.init.constant_(self.transformer[i].decoder.coord_embed[0].layers[-1].bias.data[2:], -2.0)
