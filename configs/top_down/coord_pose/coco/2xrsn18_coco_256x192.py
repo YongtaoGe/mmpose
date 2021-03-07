@@ -8,12 +8,12 @@ evaluation = dict(interval=1, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
     type='AdamW',
-    lr=1e-2,
+    lr=4e-3,
     weight_decay=1e-5,
     paramwise_cfg = dict(
         custom_keys={
-            'transformer': dict(lr_mult=0.02, decay_mult=1.0),
-            'query_embed': dict(lr_mult=0.2, decay_mult=1.0),
+            'transformer': dict(lr_mult=0.1, decay_mult=1.0),
+            # 'query_embed': dict(lr_mult=0.2, decay_mult=1.0),
         },
         # bypass_duplicate=True
     )
@@ -21,12 +21,12 @@ optimizer = dict(
 
 optimizer_config = dict(grad_clip=None,
                         # grad_clip=dict(max_norm=5, norm_type=2),
-                        paramwise_cfg=dict(
-                            custom_keys={
-                                'transformer': dict(grad_clip=dict(max_norm=0.1, norm_type=2)),
-                                # 'query_embed': dict(lr_mult=0.1, decay_mult=1.0),
-                            },
-                        )
+                        # paramwise_cfg=dict(
+                        #     custom_keys={
+                        #         'transformer': dict(grad_clip=dict(max_norm=0.1, norm_type=2)),
+                        #         # 'query_embed': dict(lr_mult=0.1, decay_mult=1.0),
+                        #     },
+                        # )
                     )
 
 # optimizer
@@ -41,16 +41,19 @@ optimizer_config = dict(grad_clip=None,
 
 # learning policy
 lr_config = dict(
-    policy='step',
+    policy='CosineAnnealing',
     warmup='linear',
-    warmup_iters=2000,
-    warmup_ratio=0.001,
-    step=[170, 190, 200])
-total_epochs = 210
+    warmup_iters=2400,
+    warmup_ratio=1.0 / 10,
+    min_lr_ratio=1e-5)
+
+total_epochs = 105
+
 log_config = dict(
     interval=10, hooks=[
         dict(type='TextLoggerHook'),
     ])
+
 
 channel_cfg = dict(
     num_output_channels=17,

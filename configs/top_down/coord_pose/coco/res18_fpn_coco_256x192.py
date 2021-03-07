@@ -43,13 +43,17 @@ optimizer_config = dict(grad_clip=None,
 # optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
 
 # learning policy
-lr_config = dict(
-    policy='step',
-    warmup='linear',
-    warmup_iters=500,
-    warmup_ratio=0.001,
-    step=[170, 190, 200])
-total_epochs = 210
+# lr_config = dict(
+#     policy='step',
+#     warmup='linear',
+#     warmup_iters=2500,
+#     warmup_ratio=0.001,
+#     step=[170, 190, 200])
+# total_epochs = 210
+
+lr_config = dict( policy='Linear', warmup='linear', warmup_iters=2400, warmup_ratio=0.1,)
+total_epochs = 105
+
 log_config = dict(
     interval=10, hooks=[
         dict(type='TextLoggerHook'),
@@ -68,28 +72,21 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained=None,
-    backbone=dict(
-        type='RSN',
-        unit_channels=256,
-        num_stages=1,
-        num_units=4,
-        num_blocks=[2, 2, 2, 2],
-        num_steps=4,
-        norm_cfg=dict(type='BN')),
-    neck=dict(type='InputProj', in_channals=(256, 256, 256, 256), out_channal=256),
+    pretrained='torchvision://resnet18',
+    backbone=dict(type='ResNet', depth=18, num_stages=4, out_indices=(0, 1, 2, 3)),
+    neck=dict(type='FPN', in_channels=[64, 128, 256, 512], out_channels=256, num_outs=4),
     keypoint_head=dict(
         type='TransHead',
         num_joints=channel_cfg['num_output_channels'],
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
-        loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=20),
+        loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
         in_channels=2048,
         out_indices=(0, 1, 2, 3),
         num_encoder_layers=0,
         num_decoder_layers=6,
         with_box_refine=True,
         num_stages=1,
-        neck_type='InputProj',
+        neck_type='FPN',
     ),
     train_cfg=dict(),
     test_cfg = dict(

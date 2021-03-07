@@ -4,9 +4,9 @@ from .fc_head import FcHead
 from .top_down_multi_stage_head import TopDownMSMUHead, TopDownMultiStageHead
 from .top_down_simple_head import TopDownSimpleHead
 from .coord_pose_head import TransHead
-
+from .multi_layer_fc_head import MultiLayerFcHead
 __all__ = [
     'TopDownSimpleHead', 'TopDownMultiStageHead', 'TopDownMSMUHead',
     'BottomUpHigherResolutionHead', 'BottomUpSimpleHead', 'FcHead',
-    'TransHead'
+    'TransHead', 'MultiLayerFcHead'
 ]

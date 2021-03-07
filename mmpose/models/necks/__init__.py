@@ -1,4 +1,6 @@
 from .gap_neck import GlobalAveragePooling
 from .trans_neck import InputProj
+from .fpn import FPN
+from .hrfpn import HRFPN
 
-__all__ = ['GlobalAveragePooling', 'InputProj']
+__all__ = ['GlobalAveragePooling', 'InputProj', 'FPN', 'HRFPN']

@@ -4,55 +4,26 @@ resume_from = None
 dist_params = dict(backend='nccl')
 workflow = [('train', 1)]
 checkpoint_config = dict(interval=10)
-evaluation = dict(interval=1, metric='mAP', key_indicator='AP')
+evaluation = dict(interval=10, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
-    type='AdamW',
-    lr=4e-3,
-    weight_decay=1e-5,
-    # type='Adam',
-    # lr=4e-,
-    # weight_decay=1e-4,
-    paramwise_cfg = dict(
-        custom_keys={
-            'transformer': dict(lr_mult=0.1, decay_mult=1.0),
-            # 'query_embed': dict(lr_mult=0.5, decay_mult=1.0),
-        },
-        # bypass_duplicate=True
-    )
+    type='Adam',
+    lr=5e-4,
 )
-
-optimizer_config = dict(grad_clip=None,
-                        # grad_clip=dict(max_norm=5, norm_type=2),
-                        # paramwise_cfg=dict(
-                        #     custom_keys={
-                        #         'transformer': dict(grad_clip=dict(max_norm=0.1, norm_type=2)),
-                        #         # 'query_embed': dict(lr_mult=0.1, decay_mult=1.0),
-                        #     },
-                        # )
-                    )
-
-# optimizer
-# optimizer = dict(
-#     type='AdamW',
-#     lr=0.0001,
-#     weight_decay=0.0001,
-#     paramwise_cfg=dict(
-#         custom_keys={'transformer': dict(lr_mult=0.1, decay_mult=1.0)})
-# )
-# optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
-
+optimizer_config = dict(grad_clip=None)
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=0.001,
-    step=[170, 190, 200])
+    step=[170, 200])
 total_epochs = 210
 log_config = dict(
-    interval=10, hooks=[
+    interval=50,
+    hooks=[
         dict(type='TextLoggerHook'),
+        # dict(type='TensorboardLoggerHook')
     ])
 
 channel_cfg = dict(
@@ -68,36 +39,20 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained=None,
-    backbone=dict(
-        type='RSN',
-        unit_channels=256,
-        num_stages=1,
-        num_units=4,
-        num_blocks=[2, 2, 2, 2],
-        num_steps=4,
-        norm_cfg=dict(type='BN')),
-    neck=dict(type='InputProj', in_channals=(256, 256, 256, 256), out_channal=256),
+    pretrained='torchvision://resnet18',
+    backbone=dict(type='ResNet', depth=18, num_stages=4, out_indices=(3, )),
+    # neck=dict(type='GlobalAveragePooling'),
     keypoint_head=dict(
-        type='TransHead',
+        type='MultiLayerFcHead',
+        in_channels=24576,
         num_joints=channel_cfg['num_output_channels'],
-        # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
-        loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=20),
-        in_channels=2048,
-        out_indices=(0, 1, 2, 3),
-        num_encoder_layers=0,
-        num_decoder_layers=6,
-        with_box_refine=True,
-        num_stages=1,
-        neck_type='InputProj',
-    ),
+        loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True)),
     train_cfg=dict(),
-    test_cfg = dict(
+    test_cfg=dict(
         flip_test=True,
         post_process='default',
         shift_heatmap=True,
-        modulate_kernel=11)
-)
+        modulate_kernel=11))
 
 data_cfg = dict(
     image_size=[192, 256],
@@ -107,13 +62,11 @@ data_cfg = dict(
     dataset_channel=channel_cfg['dataset_channel'],
     inference_channel=channel_cfg['inference_channel'],
     soft_nms=False,
-    # use_nms=False,
     nms_thr=1.0,
     oks_thr=0.9,
     vis_thr=0.2,
     use_gt_bbox=False,
     det_bbox_thr=0.0,
-    # bbox_file='',
     bbox_file='data/coco/person_detection_results/'
     'COCO_val2017_detections_AP_H_56_person.json',
 )
@@ -133,10 +86,6 @@ train_pipeline = [
         type='NormalizeTensor',
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225]),
-    # dict(
-    #     type='TopDownGenerateTarget',
-    #     kernel=[(11, 11), (9, 9), (7, 7), (5, 5)],
-    #     encoding='Megvii'),
     dict(type='TopDownGenerateTargetRegression'),
     dict(
         type='Collect',
@@ -157,9 +106,7 @@ val_pipeline = [
         std=[0.229, 0.224, 0.225]),
     dict(
         type='Collect',
-        keys=[
-            'img',
-        ],
+        keys=['img'],
         meta_keys=[
             'image_file', 'center', 'scale', 'rotation', 'bbox_score',
             'flip_pairs'
@@ -170,8 +117,8 @@ test_pipeline = val_pipeline
 
 data_root = 'data/coco'
 data = dict(
-    samples_per_gpu=32,
-    workers_per_gpu=4,
+    samples_per_gpu=8, #TODO set batch size here
+    workers_per_gpu=2,
     val_dataloader=dict(samples_per_gpu=32),
     test_dataloader=dict(samples_per_gpu=32),
     train=dict(

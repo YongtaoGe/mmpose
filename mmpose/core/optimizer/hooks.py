@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from mmcv.runner import OptimizerHook
 from torch.nn.utils import clip_grad
-
+from mmcv.runner import HOOKS, LrUpdaterHook
 
 class ParamwiseOptimizerHook(OptimizerHook):
     """FP16 optimizer hook.
@@ -82,3 +82,20 @@ class ParamwiseOptimizerHook(OptimizerHook):
         runner.optimizer.step()
 
 
+@HOOKS.register_module()
+class LinearLrUpdaterHook(LrUpdaterHook):
+
+    def __init__(self,  **kwargs):
+        super(LinearLrUpdaterHook, self).__init__(**kwargs)
+
+    def get_lr(self, runner, base_lr):
+        assert not self.by_epoch
+        # progress = runner.epoch if self.by_epoch else runner.iter
+        if runner.iter >= self.warmup_iters:
+            lr_factor = 1 - ((runner.iter - self.warmup_iters)/(runner.max_iters - self.warmup_iters))
+            lr_factor = min(max(lr_factor, 0), 1)
+            lr = base_lr * lr_factor
+        else:
+            k = (1 - runner.iter / self.warmup_iters) * (1 - self.warmup_ratio)
+            lr = base_lr * k
+        return lr

@@ -279,14 +279,14 @@ class Upsample_unit(nn.Module):
             inplace=True)
         self.relu = nn.ReLU(inplace=True)
         # add by gyt
-        self.out_conv = ConvModule(
-            unit_channels,
-            unit_channels,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            norm_cfg=self.norm_cfg,
-            inplace=True)
+        # self.out_conv = ConvModule(
+        #     unit_channels,
+        #     unit_channels,
+        #     kernel_size=1,
+        #     stride=1,
+        #     padding=0,
+        #     norm_cfg=self.norm_cfg,
+        #     inplace=True)
         ##########
 
         self.ind = ind
@@ -346,7 +346,7 @@ class Upsample_unit(nn.Module):
         out = self.relu(out)
         # import pdb
         # pdb.set_trace()
-        out = self.out_conv(out)
+        # out = self.out_conv(out)
 
         skip1 = None
         skip2 = None

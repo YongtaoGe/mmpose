@@ -9,7 +9,7 @@ from mmpose.core.evaluation import (keypoint_pck_accuracy,
 from mmpose.core.post_processing import fliplr_regression
 from mmpose.models.builder import build_loss
 from mmpose.models.registry import HEADS
-from mmpose.models.utils.transformer_utils import PositionEmbeddingSine
+from mmpose.models.utils.transformer_utils import PositionEmbeddingSine, PositionEmbeddingLearned
 from .deformable_transformer import DeformableTransformer
 import copy
 
@@ -47,16 +47,20 @@ class TransHead(nn.Module):
                  with_box_refine=True,
                  num_encoder_layers=0,
                  num_decoder_layers=6,
+                 decoder_layer_type="deformable",
                  num_stages=1,
+                 neck_type=None
                  ):
         super().__init__()
         self.backbone_out_channels = {0:256, 1:256, 2:256, 3:256}
         self.out_indices = out_indices
-        self.num_level = len(out_indices)
+        self.num_levels = len(out_indices)
         self.num_stages = num_stages
         self.in_channels = in_channels
         self.num_joints = num_joints
+        self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
+        self.neck_type=neck_type
 
         self.loss = build_loss(loss_keypoint)
 
@@ -64,7 +68,20 @@ class TransHead(nn.Module):
         self.test_cfg = {} if test_cfg is None else test_cfg
 
         self.hidden_dim = hidden_dim
-        self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
+
+        if self.num_encoder_layers > 0:
+            self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
+        else:
+            patch_embed_modules = []
+            feat_size = [[64, 48], [32, 24], [16, 12], [8, 6]]
+            for i in range(self.num_levels):
+                # import pdb
+                # pdb.set_trace()
+                patch_embed_modules.append(
+                    PositionEmbeddingSine(hidden_dim // 2, normalize=True))
+                    # PositionEmbeddingLearned(hidden_dim // 2, feat_h=feat_size[i][0], feat_w=feat_size[i][1]))
+            self.position_embedding = nn.Sequential(*patch_embed_modules)
+
         self.query_embed = nn.Embedding(self.num_joints, hidden_dim * 2)
 
         transformer_modules = []
@@ -75,11 +92,12 @@ class TransHead(nn.Module):
                     nhead=8,
                     num_encoder_layers=num_encoder_layers,
                     num_decoder_layers=num_decoder_layers,
+                    decoder_layer_type=decoder_layer_type,
                     dim_feedforward=1024,
                     dropout=0.1,
                     activation="relu",
                     return_intermediate_dec=True,
-                    num_feature_levels=self.num_level,
+                    num_feature_levels=self.num_levels,
                     dec_n_points=4,
                     enc_n_points=4,
                     hidden_dim=hidden_dim,
@@ -90,6 +108,7 @@ class TransHead(nn.Module):
             )
         self.transformer = nn.Sequential(*transformer_modules)
 
+
     def forward(self, feat_for_all_stages):
         """Forward function."""
         #[
@@ -98,11 +117,19 @@ class TransHead(nn.Module):
         # assert len(x) == len
         # import pdb
         # pdb.set_trace()
+        if self.neck_type == 'FPN' or self.neck_type is None:
+            feat_for_all_stages = [feat_for_all_stages]
+
         outputs_coords = []
         hs_for_all_stages, inter_references_for_all_stages = [], []
 
         for stage_i, feat_for_one_stage in enumerate(feat_for_all_stages):
-            pos_embeds_for_one_stage = [self.position_embedding(feat) for feat in feat_for_one_stage]
+            if self.num_encoder_layers > 0:
+                pos_embeds_for_one_stage = [self.position_embedding(feat) for feat in feat_for_one_stage]
+            else:
+                pos_embeds_for_one_stage = [self.position_embedding[i](feat) for i, feat in enumerate(feat_for_one_stage)]
+
+
             feat_for_one_stage = feat_for_one_stage[::-1]
             pos_embeds_for_one_stage = pos_embeds_for_one_stage[::-1]
 
@@ -123,7 +150,7 @@ class TransHead(nn.Module):
                 src_flatten = torch.cat(src_flatten, 1)
                 spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
                 level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-                valid_ratios = torch.ones([src_flatten.size(0), self.num_level, 2],
+                valid_ratios = torch.ones([src_flatten.size(0), self.num_levels, 2],
                                           dtype=torch.float, device=src_flatten.device)
 
 

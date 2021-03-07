@@ -17,7 +17,7 @@ from torch import nn, Tensor
 from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 
 # from util.misc import inverse_sigmoid
-from ..utils.ms_deform_attn import MSDeformAttn
+from mmpose.models.utils.ms_deform_attn import MSDeformAttn
 
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
@@ -44,7 +44,7 @@ class DeformableTransformer(nn.Module):
                  num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=1024, dropout=0.1,
                  activation="relu", return_intermediate_dec=False,
                  num_feature_levels=4, dec_n_points=4,  enc_n_points=4,
-                 two_stage=False, two_stage_num_proposals=300):
+                 two_stage=False, two_stage_num_proposals=300, decoder_layer_type="deformable"):
         super().__init__()
 
         self.d_model = d_model
@@ -58,9 +58,17 @@ class DeformableTransformer(nn.Module):
                                                           num_feature_levels, nhead, enc_n_points)
         self.encoder = DeformableTransformerEncoder(encoder_layer, num_encoder_layers)
 
-        decoder_layer = DeformableTransformerDecoderLayer(d_model, dim_feedforward,
-                                                          dropout, activation,
-                                                          num_feature_levels, nhead, dec_n_points)
+        if decoder_layer_type == "deformable":
+            decoder_layer = DeformableTransformerDecoderLayer(d_model, dim_feedforward,
+                                                              dropout, activation,
+                                                              num_feature_levels, nhead, dec_n_points)
+        elif decoder_layer_type == "standard":
+            decoder_layer = TransformerDecoderLayer(d_model, dim_feedforward,
+                                                              dropout, activation,
+                                                              num_feature_levels, nhead, dec_n_points)
+        else:
+            raise NotImplementedError
+
         self.decoder = DeformableTransformerDecoder(decoder_layer, num_decoder_layers, return_intermediate_dec,
                                                     with_box_refine, hidden_dim)
 
@@ -255,6 +263,8 @@ class DeformableTransformerEncoder(nn.Module):
         super().__init__()
         self.layers = _get_clones(encoder_layer, num_layers)
         self.num_layers = num_layers
+        if self.num_layers == 0:
+            self.dropout = nn.Dropout(0.1)
 
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
@@ -273,7 +283,9 @@ class DeformableTransformerEncoder(nn.Module):
 
     def forward(self, src, spatial_shapes, level_start_index, valid_ratios, pos=None, padding_mask=None):
         if self.num_layers == 0:
-            return src
+            # import pdb
+            # pdb.set_trace()
+            return self.dropout(src + pos)
 
         output = src
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
@@ -339,7 +351,8 @@ class DeformableTransformerDecoderLayer(nn.Module):
 
         # ffn
         tgt = self.forward_ffn(tgt)
-
+        # import pdb
+        # pdb.set_trace()
         return tgt
 
 
@@ -407,6 +420,150 @@ class DeformableTransformerDecoder(nn.Module):
         return output, reference_points
 
 
+
+class TransformerDecoderLayer(nn.Module):
+    def __init__(self, d_model=256, d_ffn=1024,
+                 dropout=0.1, activation="relu",
+                 n_levels=4, n_heads=8, n_points=4):
+        super().__init__()
+
+        # cross attention
+        # self.cross_attn = MSDeformAttn(d_model, n_levels, n_heads, n_points)
+        self.multihead_attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout)
+        self.dropout1 = nn.Dropout(dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+
+        # self attention
+        self.self_attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.norm2 = nn.LayerNorm(d_model)
+
+        # ffn
+        self.linear1 = nn.Linear(d_model, d_ffn)
+        self.activation = _get_activation_fn(activation)
+        self.dropout3 = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(d_ffn, d_model)
+        self.dropout4 = nn.Dropout(dropout)
+        self.norm3 = nn.LayerNorm(d_model)
+
+    @staticmethod
+    def with_pos_embed(tensor, pos):
+        return tensor if pos is None else tensor + pos
+
+    def forward_ffn(self, tgt):
+        tgt2 = self.linear2(self.dropout3(self.activation(self.linear1(tgt))))
+        tgt = tgt + self.dropout4(tgt2)
+        tgt = self.norm3(tgt)
+        return tgt
+
+    def forward(self, tgt, query_pos, reference_points,
+                src, src_spatial_shapes,
+                level_start_index, src_padding_mask=None):
+        # self attention
+        q = k = self.with_pos_embed(tgt, query_pos)
+        tgt2 = self.self_attn(q.transpose(0, 1),
+                              k.transpose(0, 1),
+                              tgt.transpose(0, 1))[0].transpose(0, 1)
+        tgt = tgt + self.dropout2(tgt2)
+        tgt = self.norm2(tgt)
+
+        # cross attention
+        tgt2 = self.multihead_attn(self.with_pos_embed(tgt, query_pos).transpose(0, 1),
+                                   src.transpose(0, 1),
+                                   src.transpose(0, 1),
+                                   attn_mask=None,
+                                   key_padding_mask=None)[0].transpose(0, 1)
+
+        tgt = tgt + self.dropout1(tgt2)
+        tgt = self.norm1(tgt)
+        # ffn
+        tgt = self.forward_ffn(tgt)
+        return tgt
+
+
+class TransformerDecoderLayer2(nn.Module):
+    r"""TransformerDecoderLayer is made up of self-attn, multi-head-attn and feedforward network.
+    This standard decoder layer is based on the paper "Attention Is All You Need".
+    Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+    Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In Advances in
+    Neural Information Processing Systems, pages 6000-6010. Users may modify or implement
+    in a different way during application.
+
+    Args:
+        d_model: the number of expected features in the input (required).
+        nhead: the number of heads in the multiheadattention models (required).
+        dim_feedforward: the dimension of the feedforward network model (default=2048).
+        dropout: the dropout value (default=0.1).
+        activation: the activation function of intermediate layer, relu or gelu (default=relu).
+
+    Examples::
+        >>> decoder_layer = nn.TransformerDecoderLayer(d_model=512, nhead=8)
+        >>> memory = torch.rand(10, 32, 512)
+        >>> tgt = torch.rand(20, 32, 512)
+        >>> out = decoder_layer(tgt, memory)
+    """
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
+        super(TransformerDecoderLayer2, self).__init__()
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.multihead_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.dropout3 = nn.Dropout(dropout)
+
+        self.activation = _get_activation_fn(activation)
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super(TransformerDecoderLayer2, self).__setstate__(state)
+
+    def forward(self,
+                tgt: Tensor,
+                memory: Tensor,
+                tgt_mask: Optional[Tensor] = None,
+                memory_mask: Optional[Tensor] = None,
+                tgt_key_padding_mask: Optional[Tensor] = None,
+                memory_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+        r"""Pass the inputs (and mask) through the decoder layer.
+
+        Args:
+            tgt: the sequence to the decoder layer (required).
+            memory: the sequence from the last layer of the encoder (required).
+            tgt_mask: the mask for the tgt sequence (optional).
+            memory_mask: the mask for the memory sequence (optional).
+            tgt_key_padding_mask: the mask for the tgt keys per batch (optional).
+            memory_key_padding_mask: the mask for the memory keys per batch (optional).
+
+        Shape:
+            see the docs in Transformer class.
+        """
+        # tgt2: torch.Size([17, 1, 512])
+        tgt2 = self.self_attn(tgt, tgt, tgt, attn_mask=tgt_mask,
+                              key_padding_mask=tgt_key_padding_mask)[0]
+        import pdb
+        pdb.set_trace()
+        tgt = tgt + self.dropout1(tgt2)
+        tgt = self.norm1(tgt)
+        tgt2 = self.multihead_attn(tgt, memory, memory, attn_mask=memory_mask, key_padding_mask=memory_key_padding_mask)[0]
+        tgt = tgt + self.dropout2(tgt2)
+        tgt = self.norm2(tgt)
+        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
+        tgt = tgt + self.dropout3(tgt2)
+        tgt = self.norm3(tgt)
+        return tgt
+
+
+
+
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
@@ -437,3 +594,9 @@ def build_deforamble_transformer(args):
         enc_n_points=args.enc_n_points,
         two_stage=args.two_stage,
         two_stage_num_proposals=args.num_queries)
+
+if __name__ == "__main__":
+    decoder_layer = TransformerDecoderLayer2(d_model=512, nhead=8)
+    memory = torch.rand(256, 1, 512)
+    tgt = torch.rand(17, 1, 512)
+    out = decoder_layer(tgt, memory)
