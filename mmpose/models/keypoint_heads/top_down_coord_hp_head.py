@@ -10,7 +10,7 @@ from mmpose.core.post_processing import fliplr_regression
 from mmpose.models.builder import build_loss
 from mmpose.models.registry import HEADS
 from mmpose.models.utils.transformer_utils import PositionEmbeddingSine, PositionEmbeddingLearned
-from .deformable_transformer import DeformableTransformer
+from .deformable_transformer import DeformableTransformer, OneQueryDeformableTransformer
 from mmpose.core.evaluation import pose_pck_accuracy
 import copy
 
@@ -545,11 +545,12 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
         self.hidden_dim = hidden_dim
 
         self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
+        # self.query_embed = nn.Embedding(17, hidden_dim * 2)
         query_embed = []
         for i in range(self.num_joints):
             query_embed.append(nn.Embedding(1, hidden_dim * 2))
         self.query_embed = nn.Sequential(*query_embed)
-
+        # self.transformer = OneQueryDeformableTransformer(
         self.transformer = DeformableTransformer(
                     d_model=self.hidden_dim,
                     nhead=8,
@@ -574,7 +575,7 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
         #[
         # [[2, 256, 8, 6], [2, 256, 16, 12], [2, 256, 32, 24], [2, 256, 64, 48]],
         #]
-        feat_for_all_layers, attention_for_all_layers = input
+        feat_for_all_layers, attention = input
         outputs_coords = []
         hs_for_all_joints, inter_references_for_all_joints = [], []
         pos_embeds_for_all_layers = [self.position_embedding(feat) for feat in feat_for_all_layers]
@@ -583,13 +584,16 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
         # inter_references = torch.cat(inter_references_for_all_joints, 0)
         # hs_for_all_joints.append(hs)
         # inter_references_for_all_joints.append(inter_references)
+        sigmoid_attention = attention.sigmoid()
 
         for join_i in range(self.num_joints):
             attend_feat_for_all_layers = []
-            for feat_i, attention_i in zip(feat_for_all_layers, attention_for_all_layers):
-                attention_i = attention_i.sigmoid()
+            for feat_i in feat_for_all_layers:
+                sigmoid_attention_i = nn.functional.interpolate(
+                        sigmoid_attention, size=[feat_i.size(2), feat_i.size(3)], mode='bilinear', align_corners=True)
+
                 attend_feat_for_all_layers.append(
-                    feat_i * attention_i[:, join_i, :, :].unsqueeze(1)
+                    feat_i * sigmoid_attention_i[:, join_i, :, :].unsqueeze(1)
                 )
             query_embed = self.query_embed[join_i].weight
             hs, init_reference, inter_references = \
@@ -621,21 +625,96 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
         outputs_coord = torch.cat(outputs_coords, dim=1)
         # outputs_coord = outputs_coord[-1]
         # N, C = output.shape
-        outputs_hp = []
-        for attention_i in attention_for_all_layers:
-            outputs_hp.append(
-                nn.functional.interpolate(
-                        attention_i, size=self.heatmap_size, mode='bilinear', align_corners=True)
-            )
-
+        outputs_hp = attention
         # outputs_hp = torch.stack(outputs_hp, dim=1)
 
         outputs = {
             "coord": outputs_coord,
             "hp": outputs_hp
         }
+
+        return outputs
+
+    def forward11(self, input):
+        """Forward function."""
+        #[
+        # [[2, 256, 8, 6], [2, 256, 16, 12], [2, 256, 32, 24], [2, 256, 64, 48]],
+        #]
+
+        feat_for_all_layers, attention = input
+        bs = attention.size(0)
+        outputs_coords = []
+        hs_for_all_joints, inter_references_for_all_joints = [], []
+        pos_embeds_for_all_layers = [self.position_embedding(feat) for feat in feat_for_all_layers]
+
+        # hs = torch.cat(hs_for_all_joints, 0)
+        # inter_references = torch.cat(inter_references_for_all_joints, 0)
+        # hs_for_all_joints.append(hs)
+        # inter_references_for_all_joints.append(inter_references)
+        sigmoid_attention = attention.sigmoid()
+
+
+        attent_feat_for_all_joints_all_layers = []
+        for join_i in range(self.num_joints):
+            attend_feat_for_all_layers = []
+            for feat_i in feat_for_all_layers:
+                sigmoid_attention_i = nn.functional.interpolate(
+                        sigmoid_attention, size=[feat_i.size(2), feat_i.size(3)], mode='bilinear', align_corners=True)
+                feat_i = feat_i * sigmoid_attention_i[:, join_i, :, :].unsqueeze(1)
+
+                attend_feat_for_all_layers.append(
+                    feat_i.flatten(2).transpose(1, 2)
+                )
+            attend_feat_for_all_layers = torch.cat(attend_feat_for_all_layers, 1)
+            attent_feat_for_all_joints_all_layers.append(attend_feat_for_all_layers)
+
+        attent_feat_for_all_joints_all_layers = torch.stack(attent_feat_for_all_joints_all_layers, dim=0)
+        attent_feat_for_all_joints_all_layers = attent_feat_for_all_joints_all_layers.reshape(-1,
+                                                                                              attent_feat_for_all_joints_all_layers.size(2),
+                                                                                              attent_feat_for_all_joints_all_layers.size(3))
+
+        query_embed = self.query_embed.weight
+        hs, init_reference, inter_references = \
+            self.transformer(attent_feat_for_all_joints_all_layers, pos_embeds_for_all_layers, query_embed)
+
         # import pdb
         # pdb.set_trace()
+        hs = hs.reshape(self.num_decoder_layers, bs, self.num_joints, self.hidden_dim)
+        init_reference = init_reference.reshape(bs, self.num_joints, 2)
+        inter_references = inter_references.reshape(self.num_decoder_layers, bs, self.num_joints, 2)
+        # hs: [num_layers, bs*17, 1, 256]
+
+        for lvl in range(hs.shape[0]):
+            # stage_i = lvl // self.num_decoder_layers
+            # stage_lvl = lvl % self.num_decoder_layers
+            if lvl == 0:
+                reference = init_reference
+            else:
+                reference = inter_references[lvl - 1]
+            reference = inverse_sigmoid(reference)
+            # outputs_class = self.class_embed[lvl](hs[lvl])
+            tmp = self.transformer.decoder.coord_embed[lvl](hs[lvl])
+            # debug_tmp.append(tmp)
+            if reference.shape[-1] == 4:
+                tmp += reference
+            else:
+                assert reference.shape[-1] == 2
+                tmp[..., :2] += reference
+            outputs_coord = tmp.sigmoid()
+            # outputs_classes.append(outputs_class)
+        outputs_coords.append(outputs_coord)
+
+        # outputs_class = torch.stack(outputs_classes)
+        outputs_coord = torch.cat(outputs_coords, dim=1)
+        # outputs_coord = outputs_coord[-1]
+        # N, C = output.shape
+        outputs_hp = attention
+        # outputs_hp = torch.stack(outputs_hp, dim=1)
+
+        outputs = {
+            "coord": outputs_coord,
+            "hp": outputs_hp
+        }
 
         return outputs
 
@@ -668,11 +747,11 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
         """
 
         losses = dict()
-
-        assert not isinstance(self.loss, nn.Sequential)
+        assert not isinstance(self.loss_hp, nn.Sequential)
         assert target.dim() == 4 and target_weight.dim() == 3
-        losses['mse_loss'] = self.loss(output, target, target_weight)
-
+        losses['mse_loss'] = self.loss_hp(output, target, target_weight)
+        # import pdb
+        # pdb.set_trace()
         return losses
 
     def get_coord_loss(self, output, target, target_weight):
@@ -747,13 +826,10 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
             normalize=np.ones((N, 2), dtype=np.float32))
         accuracy['coord_acc'] = avg_acc
 
-        assert isinstance(hp_output, list)
-        assert hp_target.dim() == 5 and hp_target_weight.dim() == 4
         _, avg_acc, _ = pose_pck_accuracy(
-            hp_output[-1].detach().cpu().numpy(),
-            hp_target[:, -1, ...].detach().cpu().numpy(),
-            hp_target_weight[:, -1,
-            ...].detach().cpu().numpy().squeeze(-1) > 0)
+            hp_output.detach().cpu().numpy(),
+            hp_target.detach().cpu().numpy(),
+            hp_target_weight.detach().cpu().numpy().squeeze(-1) > 0)
         accuracy['hp_acc'] = float(avg_acc)
 
         return accuracy

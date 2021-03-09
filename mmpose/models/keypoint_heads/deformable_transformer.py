@@ -216,6 +216,75 @@ class DeformableTransformer(nn.Module):
         return hs, init_reference_out, inter_references_out
 
 
+
+
+class OneQueryDeformableTransformer(DeformableTransformer):
+    def forward(self, srcs, pos_embeds, query_embed=None):
+        assert self.two_stage or query_embed is not None
+
+        # prepare input for encoder
+        src_flatten = []
+        lvl_pos_embed_flatten = []
+        spatial_shapes = []
+        # for lvl, (src, pos_embed) in enumerate(zip(srcs, pos_embeds)):
+
+        for lvl, pos_embed in enumerate(pos_embeds):
+            bs, c, h, w = pos_embed.shape
+            spatial_shape = (h, w)
+            spatial_shapes.append(spatial_shape)
+            # src = src.flatten(2).transpose(1, 2)
+            # mask = mask.flatten(1)
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)
+            lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
+            lvl_pos_embed_flatten.append(lvl_pos_embed)
+            # src_flatten.append(src)
+            # mask_flatten.append(mask)
+        # torch.Size([bs, 65, 256])
+        # src_flatten = torch.cat(src_flatten, 1)
+        # torch.Size([bs, 65])
+        # mask_flatten = torch.cat(mask_flatten, 1)
+        # torch.Size([bs, 65, 256])
+        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
+        # tensor([[8, 6], [4, 3], [2, 2], [1, 1]], device='cuda:0')
+        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=pos_embed.device)
+        # tensor([ 0, 48, 60, 64], device='cuda:0')
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        # torch.Size([bs, 4, 2])
+        # import pdb
+        # pdb.set_trace()
+        # valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+        valid_ratios = torch.ones([srcs.size(0), self.num_feature_levels, 2],
+                        dtype=torch.float, device=pos_embed.device)
+        # encoder
+        # torch.Size([bs, 65, 256])
+        # memory = self.encoder(src_flatten, spatial_shapes,
+        #                       level_start_index, valid_ratios,
+        #                       lvl_pos_embed_flatten)
+
+        memory = srcs
+        # prepare input for decoder
+        bs, _, c = memory.shape
+        # torch.Size([17, 512]) -> torch.Size([17, 256]) and torch.Size([17, 256])
+        query_embed, tgt = torch.split(query_embed, c, dim=1)
+        # torch.Size([17, 256]) -> torch.Size([17, 1, 256]) -> torch.Size([17 * bs, 1, 256])
+        query_embed = query_embed.unsqueeze(1).expand(bs, -1, -1)
+        # torch.Size([17, 256]) -> torch.Size([17 * bs, 1, 256])
+        tgt = tgt.unsqueeze(1).expand(bs, -1, -1)
+        # torch.Size([bs, 17, 256]) -> torch.Size([bs, 17, 2])
+        reference_points = self.reference_points(query_embed).sigmoid()
+        init_reference_out = reference_points
+
+        # decoder
+        # hs: [num_dec_layers, 17*bs, 1, 2]
+        # inter_references: [num_dec_layers, bs, 17, 2]
+        hs, inter_references = self.decoder(tgt, reference_points, memory,
+                                            spatial_shapes, level_start_index, valid_ratios,
+                                            query_embed)
+        inter_references_out = inter_references
+        return hs, init_reference_out, inter_references_out
+
+
+
 class DeformableTransformerEncoderLayer(nn.Module):
     def __init__(self,
                  d_model=256, d_ffn=1024,

@@ -226,7 +226,6 @@ class SimpleBaselineNeck(nn.Module):
                     inplace=False)
                 )
 
-
     @staticmethod
     def _get_deconv_cfg(deconv_kernel):
         """Get configurations for deconv layers."""
@@ -259,6 +258,7 @@ class SimpleBaselineNeck(nn.Module):
         x = self.deconv_layers(x)
         # [bs,17,64,48]
         x = self.final_layer(x)
+        # [[bs,256,64,48],[bs,256,64,48],[bs,256,64,48],[bs,256,64,48],  [bs,17,64,48]
         return query_list, x
 
     def _init_inputs(self, in_channels, in_index, input_transform):
