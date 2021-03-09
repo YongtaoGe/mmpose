@@ -7,6 +7,9 @@ from mmpose.core.evaluation import (keypoint_pck_accuracy,
 from mmpose.core.post_processing import fliplr_regression
 from mmpose.models.builder import build_loss
 from mmpose.models.registry import HEADS
+from mmcv.cnn import (ConvModule, build_conv_layer, build_norm_layer, constant_init,
+                      normal_init, xavier_init)
+from torch.nn.modules.batchnorm import _BatchNorm
 
 
 @HEADS.register_module()
@@ -26,7 +29,10 @@ class MultiLayerFcHead(nn.Module):
                  num_joints,
                  loss_keypoint=None,
                  train_cfg=None,
-                 test_cfg=None):
+                 test_cfg=None,
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN', requires_grad=True),
+                 ):
         super().__init__()
 
         self.in_channels = in_channels
@@ -36,19 +42,66 @@ class MultiLayerFcHead(nn.Module):
 
         self.train_cfg = {} if train_cfg is None else train_cfg
         self.test_cfg = {} if test_cfg is None else test_cfg
+        self.conv_cfg = conv_cfg
+        self.norm_cfg = norm_cfg
 
-        self.fc1 = nn.Linear(self.in_channels, 24576)
-        self.fc2 = nn.Linear(24576, 2048)
-        self.fc3 = nn.Linear(2048, self.num_joints * 2)
+        self.conv1 = ConvModule(
+                        256,
+                        512,
+                        kernel_size=7,
+                        stride=4,
+                        padding=3,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        inplace=True)
+        self.conv2 = ConvModule(
+                        512,
+                        1024,
+                        kernel_size=7,
+                        stride=4,
+                        padding=3,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        inplace=True)
+        self.conv3 = ConvModule(
+                        1024,
+                        2048,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        inplace=True)
+
+        # self.conv5 = ConvModule(
+        #                 1024,
+        #                 2048,
+        #                 kernel_size=3,
+        #                 stride=2,
+        #                 padding=1,
+        #                 conv_cfg=self.conv_cfg,
+        #                 norm_cfg=self.norm_cfg,
+        #                 inplace=True)
+
+        self.fc1 = nn.Linear(2048, self.num_joints * 2)
+
 
     def forward(self, x):
         """Forward function."""
+
+        x = x[0]
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        # x = self.conv4(x)
+        # x = self.conv5(x)
         # import pdb
         # pdb.set_trace()
         x = x.reshape(x.size(0), -1)
-        x = self.fc1(x)
-        x = self.fc2(x)
-        output = self.fc3(x)
+
+        # x = self.fc1(x)
+        # x = self.fc2(x)
+        output = self.fc1(x)
         N, C = output.shape
         return output.reshape([N, C // 2, 2])
 
@@ -180,5 +233,9 @@ class MultiLayerFcHead(nn.Module):
 
     def init_weights(self):
         normal_init(self.fc1, mean=0, std=0.01, bias=0)
-        normal_init(self.fc2, mean=0, std=0.01, bias=0)
-        normal_init(self.fc3, mean=0, std=0.01, bias=0)
+        """Initialize the weights of FPN module."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                xavier_init(m, distribution='uniform')
+        # normal_init(self.fc2, mean=0, std=0.01, bias=0)
+        # normal_init(self.fc3, mean=0, std=0.01, bias=0)

@@ -561,7 +561,8 @@ class HRNet(nn.Module):
             else:
                 x_list.append(y_list[i])
         y_list = self.stage4(x_list)
-
+        # import pdb
+        # pdb.set_trace()
         return y_list
 
     def train(self, mode=True):

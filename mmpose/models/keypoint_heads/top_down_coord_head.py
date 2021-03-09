@@ -69,18 +69,16 @@ class TransHead(nn.Module):
 
         self.hidden_dim = hidden_dim
 
-        if self.num_encoder_layers > 0:
-            self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
-        else:
-            patch_embed_modules = []
-            feat_size = [[64, 48], [32, 24], [16, 12], [8, 6]]
-            for i in range(self.num_levels):
-                # import pdb
-                # pdb.set_trace()
-                patch_embed_modules.append(
-                    PositionEmbeddingSine(hidden_dim // 2, normalize=True))
-                    # PositionEmbeddingLearned(hidden_dim // 2, feat_h=feat_size[i][0], feat_w=feat_size[i][1]))
-            self.position_embedding = nn.Sequential(*patch_embed_modules)
+        # if self.num_encoder_layers > 0:
+        self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
+        # else:
+        #     patch_embed_modules = []
+        #     feat_size = [[64, 48], [32, 24], [16, 12], [8, 6]]
+        #     for i in range(self.num_levels):
+        #         patch_embed_modules.append(
+        #             PositionEmbeddingSine(hidden_dim // 2, normalize=True))
+        #             # PositionEmbeddingLearned(hidden_dim // 2, feat_h=feat_size[i][0], feat_w=feat_size[i][1]))
+        #     self.position_embedding = nn.Sequential(*patch_embed_modules)
 
         self.query_embed = nn.Embedding(self.num_joints, hidden_dim * 2)
 
@@ -117,18 +115,17 @@ class TransHead(nn.Module):
         # assert len(x) == len
         # import pdb
         # pdb.set_trace()
-        if self.neck_type == 'FPN' or self.neck_type is None:
+        if self.neck_type == 'FPN':
             feat_for_all_stages = [feat_for_all_stages]
 
         outputs_coords = []
         hs_for_all_stages, inter_references_for_all_stages = [], []
 
         for stage_i, feat_for_one_stage in enumerate(feat_for_all_stages):
-            if self.num_encoder_layers > 0:
-                pos_embeds_for_one_stage = [self.position_embedding(feat) for feat in feat_for_one_stage]
-            else:
-                pos_embeds_for_one_stage = [self.position_embedding[i](feat) for i, feat in enumerate(feat_for_one_stage)]
-
+            # if self.num_encoder_layers > 0:
+            pos_embeds_for_one_stage = [self.position_embedding(feat) for feat in feat_for_one_stage]
+            # else:
+            #     pos_embeds_for_one_stage = [self.position_embedding[i](feat) for i, feat in enumerate(feat_for_one_stage)]
 
             feat_for_one_stage = feat_for_one_stage[::-1]
             pos_embeds_for_one_stage = pos_embeds_for_one_stage[::-1]
@@ -201,7 +198,6 @@ class TransHead(nn.Module):
         outputs_coord = torch.stack(outputs_coords)
         # outputs_coord = outputs_coord[-1]
         # N, C = output.shape
-
         return outputs_coord
 
     def get_loss(self, output, target, target_weight):

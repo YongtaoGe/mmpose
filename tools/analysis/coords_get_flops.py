@@ -101,8 +101,6 @@ def main():
     model.forward = model.forward_dummy
 
     dump_input = torch.rand(input_shape).cuda()
-    # import pdb
-    # pdb.set_trace()
 
     # export_onnx_file = "rsn.onnx"  # 目的ONNX文件名
     #

@@ -363,3 +363,95 @@ class TopDown(BasePose):
             imwrite(img, out_file)
 
         return img
+
+
+@POSENETS.register_module()
+class CoordAndHeatmapTopDown(TopDown):
+    def forward(self,
+                img,
+                coord_target=None,
+                coord_target_weight=None,
+                hp_target=None,
+                hp_target_weight=None,
+                img_metas=None,
+                return_loss=True,
+                return_heatmap=False,
+                **kwargs):
+        """Calls either forward_train or forward_test depending on whether
+        return_loss=True. Note this setting will change the expected inputs.
+        When `return_loss=True`, img and img_meta are single-nested (i.e.
+        Tensor and List[dict]), and when `resturn_loss=False`, img and img_meta
+        should be double nested (i.e.  List[Tensor], List[List[dict]]), with
+        the outer list indicating test time augmentations.
+
+        Note:
+            batch_size: N
+            num_keypoints: K
+            num_img_channel: C (Default: 3)
+            img height: imgH
+            img weight: imgW
+            heatmaps height: H
+            heatmaps weight: W
+
+        Args:
+            img (torch.Tensor[NxCximgHximgW]): Input images.
+            target (torch.Tensor[NxKxHxW]): Target heatmaps.
+            target_weight (torch.Tensor[NxKx1]): Weights across
+                different joint types.
+            img_metas (list(dict)): Information about data augmentation
+                By default this includes:
+                - "image_file: path to the image file
+                - "center": center of the bbox
+                - "scale": scale of the bbox
+                - "rotation": rotation of the bbox
+                - "bbox_score": score of bbox
+            return_loss (bool): Option to `return loss`. `return loss=True`
+                for training, `return loss=False` for validation & test.
+            return_heatmap (bool) : Option to return heatmap.
+
+        Returns:
+            dict|tuple: if `return loss` is true, then return losses.
+              Otherwise, return predicted poses, boxes, image paths
+                  and heatmaps.
+        """
+        if return_loss:
+            return self.forward_train(img,
+                                      coord_target, coord_target_weight,
+                                      hp_target, hp_target_weight, img_metas,
+                                      **kwargs)
+        return self.forward_test(
+            img, img_metas, return_heatmap=return_heatmap, **kwargs)
+
+    def forward_train(self, img, coord_target, coord_target_weight,
+                      hp_target, hp_target_weight, img_metas, **kwargs):
+        """
+        :param img:
+        :param coord_target: [2, 17, 2]
+        :param coord_target_weight: [2, 17, 2]
+        :param hp_target: [2, 4, 17, 64, 48]
+        :param hp_target_weight: [2, 4, 17, 1]
+        :param img_metas:
+        :param kwargs:
+        :return:
+        """
+        """Defines the computation performed at every call when training."""
+        output = self.backbone(img)
+
+        if self.with_neck:
+            output = self.neck(output)
+        if self.with_keypoint:
+            output = self.keypoint_head(output)
+        # import pdb
+        # pdb.set_trace()
+
+        # if return loss
+        losses = dict()
+        if self.with_keypoint:
+            keypoint_losses = self.keypoint_head.get_loss(
+                output, coord_target, coord_target_weight, hp_target, hp_target_weight,)
+            losses.update(keypoint_losses)
+            keypoint_accuracy = self.keypoint_head.get_accuracy(
+                output, coord_target, coord_target_weight, hp_target, hp_target_weight,)
+            losses.update(keypoint_accuracy)
+
+        return losses

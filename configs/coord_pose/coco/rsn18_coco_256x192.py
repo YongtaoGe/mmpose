@@ -43,27 +43,20 @@ optimizer_config = dict(grad_clip=None,
 # optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
 
 # learning policy
-# lr_config = dict(
-#     policy='step',
-#     warmup='linear',
-#     warmup_iters=2500,
-#     warmup_ratio=0.001,
-#     step=[170, 190, 200])
-
-
 lr_config = dict(
-    policy='Linear',
+    policy='CosineAnnealing',
     warmup='linear',
     warmup_iters=2400,
-    warmup_ratio=0.1,
-    by_epoch=False
-)
+    warmup_ratio=1.0 / 10,
+    min_lr_ratio=1e-5)
+
 total_epochs = 105
 
 log_config = dict(
     interval=10, hooks=[
         dict(type='TextLoggerHook'),
     ])
+
 
 channel_cfg = dict(
     num_output_channels=17,
@@ -78,21 +71,29 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained='torchvision://resnet50',
-    backbone=dict(type='ResNet', depth=50, num_stages=4, out_indices=(0, 1, 2, 3)),
-    neck=dict(type='InputProj', in_channals=(256, 512, 1024, 2048), out_channal=256),
+    # pretrained=None,
+    pretrained="./pretrain/rsn18_coco_256x192-72f4b4a7_20201127.pth",
+    backbone=dict(
+        type='RSN',
+        unit_channels=256,
+        num_stages=1,
+        num_units=4,
+        num_blocks=[2, 2, 2, 2],
+        num_steps=4,
+        norm_cfg=dict(type='BN')),
+    # neck=dict(type='InputProj', in_channels=(256, 256, 256, 256), out_channel=256),
     keypoint_head=dict(
         type='TransHead',
         num_joints=channel_cfg['num_output_channels'],
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
-        loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
+        loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=20),
         in_channels=2048,
         out_indices=(0, 1, 2, 3),
         num_encoder_layers=0,
         num_decoder_layers=6,
         with_box_refine=True,
         num_stages=1,
-        neck_type='InputProj',
+        neck_type=None,
     ),
     train_cfg=dict(),
     test_cfg = dict(
@@ -129,7 +130,7 @@ train_pipeline = [
         num_joints_half_body=8,
         prob_half_body=0.3),
     dict(
-        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.5),
+        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.25),
     dict(type='TopDownAffine'),
     dict(type='ToTensor'),
     dict(

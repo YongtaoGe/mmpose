@@ -86,50 +86,21 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained='https://download.openmmlab.com/mmpose/'
-    'pretrain_models/hrnet_w32-36af842e.pth',
-    backbone=dict(
-        type='HRNet',
-        in_channels=3,
-        extra=dict(
-            stage1=dict(
-                num_modules=1,
-                num_branches=1,
-                block='BOTTLENECK',
-                num_blocks=(4, ),
-                num_channels=(64, )),
-            stage2=dict(
-                num_modules=1,
-                num_branches=2,
-                block='BASIC',
-                num_blocks=(4, 4),
-                num_channels=(32, 64)),
-            stage3=dict(
-                num_modules=4,
-                num_branches=3,
-                block='BASIC',
-                num_blocks=(4, 4, 4),
-                num_channels=(32, 64, 128)),
-            stage4=dict(
-                num_modules=3,
-                num_branches=4,
-                block='BASIC',
-                num_blocks=(4, 4, 4, 4),
-                num_channels=(32, 64, 128, 256))),
-    ),
+    pretrained='torchvision://resnet18',
+    backbone=dict(type='ResNet', depth=18, num_stages=4, out_indices=(0, 1, 2, 3)),
     # neck=dict(type='FPN', in_channels=[64, 128, 256, 512], out_channels=256, num_outs=4),
-    neck=dict(type='InputProj', in_channels=(128, 256, 512), out_channel=256),
+    neck=dict(type='InputProj', in_channels=(64, 128, 256, 512), out_channel=256),
     keypoint_head=dict(
         type='TransHead',
         num_joints=channel_cfg['num_output_channels'],
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
         loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
         in_channels=2048,
-        out_indices=(1, 2, 3),
-        num_encoder_layers=0,
+        out_indices=(0, 1, 2, 3),
+        num_encoder_layers=6,
         num_decoder_layers=6,
-        decoder_layer_type="deformable",
-        # decoder_layer_type="standard",
+        # decoder_layer_type="deformable",
+        decoder_layer_type="standard",
         with_box_refine=True,
         num_stages=1,
         neck_type='InputProj',

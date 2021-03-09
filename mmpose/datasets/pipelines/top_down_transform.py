@@ -645,3 +645,112 @@ class TopDownGenerateTargetRegression():
         results['target_weight'] = target_weight
 
         return results
+
+
+
+@PIPELINES.register_module()
+class TopDownGenerateCoordAndHeatMapTarget(TopDownGenerateTarget, TopDownGenerateTargetRegression):
+    def __init__(self,
+                 sigma=2,
+                 kernel=(11, 11),
+                 valid_radius_factor=0.0546875,
+                 target_type='GaussianHeatMap',
+                 encoding='MSRA',
+                 unbiased_encoding=False):
+        self.sigma = sigma
+        self.unbiased_encoding = unbiased_encoding
+        self.kernel = kernel
+        self.valid_radius_factor = valid_radius_factor
+        self.target_type = target_type
+        self.encoding = encoding
+
+    def __call__(self, results):
+        """Generate the coord target."""
+        joints_3d = results['joints_3d']
+        joints_3d_visible = results['joints_3d_visible']
+
+        target, target_weight = self._generate_target(results['ann_info'],
+                                                      joints_3d,
+                                                      joints_3d_visible)
+
+        results['coord_target'] = target
+        results['coord_target_weight'] = target_weight
+
+        """Generate the heatmap target."""
+        assert self.encoding in ['MSRA', 'Megvii', 'UDP']
+
+        if self.encoding == 'MSRA':
+            if isinstance(self.sigma, list):
+                num_sigmas = len(self.sigma)
+                cfg = results['ann_info']
+                num_joints = cfg['num_joints']
+                heatmap_size = cfg['heatmap_size']
+
+                target = np.empty(
+                    (0, num_joints, heatmap_size[1], heatmap_size[0]),
+                    dtype=np.float32)
+                target_weight = np.empty((0, num_joints, 1), dtype=np.float32)
+                for i in range(num_sigmas):
+                    target_i, target_weight_i = self._msra_generate_target(
+                        cfg, joints_3d, joints_3d_visible, self.sigma[i])
+                    target = np.concatenate([target, target_i[None]], axis=0)
+                    target_weight = np.concatenate(
+                        [target_weight, target_weight_i[None]], axis=0)
+            else:
+                target, target_weight = self._msra_generate_target(
+                    results['ann_info'], joints_3d, joints_3d_visible,
+                    self.sigma)
+        elif self.encoding == 'Megvii':
+            if isinstance(self.kernel, list):
+                num_kernels = len(self.kernel)
+                cfg = results['ann_info']
+                num_joints = cfg['num_joints']
+                W, H = cfg['heatmap_size']
+
+                target = np.empty((0, num_joints, H, W), dtype=np.float32)
+                target_weight = np.empty((0, num_joints, 1), dtype=np.float32)
+                for i in range(num_kernels):
+                    target_i, target_weight_i = self._megvii_generate_target(
+                        cfg, joints_3d, joints_3d_visible, self.kernel[i])
+                    target = np.concatenate([target, target_i[None]], axis=0)
+                    target_weight = np.concatenate(
+                        [target_weight, target_weight_i[None]], axis=0)
+            else:
+                target, target_weight = self._megvii_generate_target(
+                    results['ann_info'], joints_3d, joints_3d_visible,
+                    self.kernel)
+        elif self.encoding == 'UDP':
+            if self.target_type == 'CombinedTarget':
+                factors = self.valid_radius_factor
+                channel_factor = 3
+            elif self.target_type == 'GaussianHeatMap':
+                factors = self.sigma
+                channel_factor = 1
+            if isinstance(factors, list):
+                num_factors = len(factors)
+                cfg = results['ann_info']
+                num_joints = cfg['num_joints']
+                W, H = cfg['heatmap_size']
+
+                target = np.empty((0, channel_factor * num_joints, H, W),
+                                  dtype=np.float32)
+                target_weight = np.empty((0, num_joints, 1), dtype=np.float32)
+                for i in range(num_factors):
+                    target_i, target_weight_i = self._udp_generate_target(
+                        cfg, joints_3d, joints_3d_visible, factors[i],
+                        self.target_type)
+                    target = np.concatenate([target, target_i[None]], axis=0)
+                    target_weight = np.concatenate(
+                        [target_weight, target_weight_i[None]], axis=0)
+            else:
+                target, target_weight = self._udp_generate_target(
+                    results['ann_info'], joints_3d, joints_3d_visible, factors,
+                    self.target_type)
+        else:
+            raise ValueError(
+                f'Encoding approach {self.encoding} is not supported!')
+
+        results['hp_target'] = target
+        results['hp_target_weight'] = target_weight
+
+        return results
