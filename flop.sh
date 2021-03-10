@@ -1,7 +1,11 @@
 
 #!/usr/bin/env bash
 PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
-python ./tools/analysis/coords_get_flops.py configs/coord_pose/coco_new/res50_3_feat_4_enc_6_dec_coco_256x192_3x.py
+python ./tools/analysis/coords_get_flops.py configs/coord_pose/coco_new/res50_3_feat_4_enc_6_dec_coco_384x288_3x.py --shape 320 240
+
+#python ./tools/analysis/coords_get_flops.py configs/coord_pose/coco_new/res18_4_feat_1_enc_6_dec_coco_384x288_3x.py --shape 384 288
+
+#python ./tools/analysis/coords_get_flops.py configs/coord_pose/coco_new/res50_3_feat_4_enc_6_dec_coco_256x192_3x.py
 
 #python ./tools/analysis/coords_get_flops.py configs/top_down/resnet/coco/res152_coco_256x192.py
 #python ./tools/analysis/coords_get_flops.py configs/top_down/deeppose/coco/deeppose_res50_coco_256x192.py
