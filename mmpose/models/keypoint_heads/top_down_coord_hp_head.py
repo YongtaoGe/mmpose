@@ -588,16 +588,19 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
 
         for join_i in range(self.num_joints):
             attend_feat_for_all_layers = []
-            for feat_i in feat_for_all_layers:
-                sigmoid_attention_i = nn.functional.interpolate(
-                        sigmoid_attention, size=[feat_i.size(2), feat_i.size(3)], mode='bilinear', align_corners=True)
-
-                attend_feat_for_all_layers.append(
-                    feat_i * sigmoid_attention_i[:, join_i, :, :].unsqueeze(1)
-                )
+            # for feat_i in feat_for_all_layers:
+            #     sigmoid_attention_i = nn.functional.interpolate(
+            #             sigmoid_attention, size=[feat_i.size(2), feat_i.size(3)], mode='bilinear', align_corners=True)
+            #
+            #     attend_feat_for_all_layers.append(
+            #         feat_i * sigmoid_attention_i[:, join_i, :, :].unsqueeze(1)
+            #     )
             query_embed = self.query_embed[join_i].weight
+
+
             hs, init_reference, inter_references = \
-                self.transformer(attend_feat_for_all_layers, pos_embeds_for_all_layers, query_embed)
+                self.transformer(feat_for_all_layers, pos_embeds_for_all_layers, query_embed)
+                # self.transformer(attend_feat_for_all_layers, pos_embeds_for_all_layers, query_embed)
             # hs: [num_layers, bs, 1, 256]
 
             for lvl in range(hs.shape[0]):

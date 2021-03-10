@@ -39,7 +39,8 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained='torchvision://resnet101',
+    # pretrained='torchvision://resnet101',
+    pretrained=None,
     backbone=dict(type='ResNet', depth=101),
     keypoint_head=dict(
         type='TopDownSimpleHead',

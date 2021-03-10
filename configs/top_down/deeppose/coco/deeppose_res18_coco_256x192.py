@@ -4,7 +4,7 @@ resume_from = None
 dist_params = dict(backend='nccl')
 workflow = [('train', 1)]
 checkpoint_config = dict(interval=10)
-evaluation = dict(interval=10, metric='mAP', key_indicator='AP')
+evaluation = dict(interval=1, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
     type='Adam',
@@ -39,14 +39,14 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    # pretrained='torchvision://resnet152',
-    pretrained=None,
-    backbone=dict(type='ResNet', depth=152),
+    pretrained='torchvision://resnet18',
+    backbone=dict(type='ResNet', depth=18, num_stages=4, out_indices=(3, )),
+    neck=dict(type='GlobalAveragePooling'),
     keypoint_head=dict(
-        type='TopDownSimpleHead',
-        in_channels=2048,
-        out_channels=channel_cfg['num_output_channels'],
-        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
+        type='FcHead',
+        in_channels=512,
+        num_joints=channel_cfg['num_output_channels'],
+        loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True)),
     train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
@@ -86,7 +86,7 @@ train_pipeline = [
         type='NormalizeTensor',
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225]),
-    dict(type='TopDownGenerateTarget', sigma=2),
+    dict(type='TopDownGenerateTargetRegression'),
     dict(
         type='Collect',
         keys=['img', 'target', 'target_weight'],
@@ -118,7 +118,9 @@ test_pipeline = val_pipeline
 data_root = 'data/coco'
 data = dict(
     samples_per_gpu=32,
-    workers_per_gpu=2,
+    workers_per_gpu=4,
+    val_dataloader=dict(samples_per_gpu=32),
+    test_dataloader=dict(samples_per_gpu=32),
     train=dict(
         type='TopDownCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_train2017.json',

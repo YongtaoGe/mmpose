@@ -4,7 +4,7 @@ resume_from = None
 dist_params = dict(backend='nccl')
 workflow = [('train', 1)]
 checkpoint_config = dict(interval=10)
-evaluation = dict(interval=5, metric='mAP', key_indicator='AP')
+evaluation = dict(interval=50, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
     type='AdamW',
@@ -66,10 +66,10 @@ lr_config = dict(
     warmup_ratio=1.0 / 10,
     min_lr_ratio=1e-5)
 
-total_epochs = 105
+total_epochs = 315
 
 log_config = dict(
-    interval=10, hooks=[
+    interval=50, hooks=[
         dict(type='TextLoggerHook'),
     ])
 
@@ -85,32 +85,25 @@ channel_cfg = dict(
 
 # model settings
 model = dict(
-    type='CoordAndHeatmapTopDown',
+    type='TopDown',
     pretrained='torchvision://resnet18',
-    # backbone=dict(type='ResNet', depth=18),
     backbone=dict(type='ResNet', depth=18, num_stages=4, out_indices=(0, 1, 2, 3)),
     # neck=dict(type='FPN', in_channels=[64, 128, 256, 512], out_channels=256, num_outs=4),
-    neck=dict(type='SimpleBaselineNeck',
-              in_channels=512,
-              out_channels=channel_cfg['num_output_channels'],
-              query_in_channels=[64,128,256,512],
-              query_out_channels=256),
+    neck=dict(type='InputProj', in_channels=(64, 128, 256, 512), out_channel=256),
     keypoint_head=dict(
-        type='SimpleBaselineOneQueryTransHead',
+        type='TransHead',
         num_joints=channel_cfg['num_output_channels'],
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
-        loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True,loss_weight=0),
-        loss_coord_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=1),
-        # in_channels=2048,
-        # out_indices=(0, 1, 2, 3),
-        num_encoder_layers=0,
-        num_decoder_layers=3,
+        loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
+        in_channels=2048,
+        out_indices=(0, 1, 2, 3),
+        num_encoder_layers=1,
+        num_decoder_layers=6,
         decoder_layer_type="deformable",
         # decoder_layer_type="standard",
         with_box_refine=True,
         num_stages=1,
-        neck_type='SimpleBaselineNeck',
-        heatmap_size=[64, 48]
+        neck_type='InputProj',
     ),
     train_cfg=dict(),
     test_cfg = dict(
@@ -147,7 +140,7 @@ train_pipeline = [
         num_joints_half_body=8,
         prob_half_body=0.3),
     dict(
-        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.25),
+        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.5),
     dict(type='TopDownAffine'),
     dict(type='ToTensor'),
     dict(
@@ -158,13 +151,10 @@ train_pipeline = [
     #     type='TopDownGenerateTarget',
     #     kernel=[(11, 11), (9, 9), (7, 7), (5, 5)],
     #     encoding='Megvii'),
-    # dict(type='TopDownGenerateTargetRegression'),
-    dict(
-        type='TopDownGenerateCoordAndHeatMapTarget',
-        sigma=2),
+    dict(type='TopDownGenerateTargetRegression'),
     dict(
         type='Collect',
-        keys=['img', 'coord_target', 'coord_target_weight', 'hp_target', 'hp_target_weight'],
+        keys=['img', 'target', 'target_weight'],
         meta_keys=[
             'image_file', 'joints_3d', 'joints_3d_visible', 'center', 'scale',
             'rotation', 'bbox_score', 'flip_pairs'
@@ -194,8 +184,8 @@ test_pipeline = val_pipeline
 
 data_root = 'data/coco'
 data = dict(
-    samples_per_gpu=16,
-    workers_per_gpu=2,
+    samples_per_gpu=32,
+    workers_per_gpu=4,
     val_dataloader=dict(samples_per_gpu=32),
     test_dataloader=dict(samples_per_gpu=32),
     train=dict(

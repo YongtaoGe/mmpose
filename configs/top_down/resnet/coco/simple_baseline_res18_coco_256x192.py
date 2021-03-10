@@ -39,12 +39,11 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    # pretrained='torchvision://resnet152',
-    pretrained=None,
-    backbone=dict(type='ResNet', depth=152),
+    pretrained='torchvision://resnet18',
+    backbone=dict(type='ResNet', depth=18),
     keypoint_head=dict(
         type='TopDownSimpleHead',
-        in_channels=2048,
+        in_channels=512,
         out_channels=channel_cfg['num_output_channels'],
         loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
     train_cfg=dict(),
@@ -117,8 +116,10 @@ test_pipeline = val_pipeline
 
 data_root = 'data/coco'
 data = dict(
-    samples_per_gpu=32,
+    samples_per_gpu=64,
     workers_per_gpu=2,
+    val_dataloader=dict(samples_per_gpu=32),
+    test_dataloader=dict(samples_per_gpu=32),
     train=dict(
         type='TopDownCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_train2017.json',

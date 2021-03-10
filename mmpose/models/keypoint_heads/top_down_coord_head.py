@@ -48,8 +48,10 @@ class TransHead(nn.Module):
                  num_encoder_layers=0,
                  num_decoder_layers=6,
                  decoder_layer_type="deformable",
+                 decoder_use_self_attn=True,
                  num_stages=1,
-                 neck_type=None
+                 neck_type=None,
+                 decoder_share_query=False
                  ):
         super().__init__()
         self.backbone_out_channels = {0:256, 1:256, 2:256, 3:256}
@@ -80,7 +82,10 @@ class TransHead(nn.Module):
         #             # PositionEmbeddingLearned(hidden_dim // 2, feat_h=feat_size[i][0], feat_w=feat_size[i][1]))
         #     self.position_embedding = nn.Sequential(*patch_embed_modules)
 
-        self.query_embed = nn.Embedding(self.num_joints, hidden_dim * 2)
+        if decoder_share_query:
+            self.query_embed = nn.Embedding(1, hidden_dim * 2)
+        else:
+            self.query_embed = nn.Embedding(self.num_joints, hidden_dim * 2)
 
         transformer_modules = []
         for i in range(num_stages):
@@ -101,7 +106,10 @@ class TransHead(nn.Module):
                     hidden_dim=hidden_dim,
                     with_box_refine=with_box_refine,
                     two_stage=False,
-                    two_stage_num_proposals=1
+                    two_stage_num_proposals=1,
+                    decoder_use_self_attn=decoder_use_self_attn,
+                    decoder_share_query=decoder_share_query,
+                    num_joints=num_joints
                 )
             )
         self.transformer = nn.Sequential(*transformer_modules)
