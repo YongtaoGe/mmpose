@@ -97,7 +97,7 @@ model = dict(
         loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
         in_channels=2048,
         out_indices=(0, 1, 2, 3),
-        num_encoder_layers=1,
+        num_encoder_layers=0,
         num_decoder_layers=6,
         decoder_layer_type="deformable",
         decoder_use_self_attn=False,
