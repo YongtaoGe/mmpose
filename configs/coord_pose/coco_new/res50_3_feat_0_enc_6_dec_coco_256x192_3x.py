@@ -66,7 +66,7 @@ lr_config = dict(
     warmup_ratio=1.0 / 10,
     min_lr_ratio=1e-5)
 
-total_epochs = 315
+total_epochs = 325
 
 log_config = dict(
     interval=50, hooks=[
