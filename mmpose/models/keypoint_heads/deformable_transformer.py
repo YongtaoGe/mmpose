@@ -18,6 +18,9 @@ from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 
 # from util.misc import inverse_sigmoid
 from mmpose.models.utils.ms_deform_attn import MSDeformAttn
+from mmcv.cnn import ConvModule
+
+
 
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
@@ -48,7 +51,8 @@ class DeformableTransformer(nn.Module):
                  num_feature_levels=4, dec_n_points=4,  enc_n_points=4,
                  two_stage=False, two_stage_num_proposals=300,
                  decoder_layer_type="deformable", decoder_use_self_attn=True, decoder_share_query=False,
-                 num_joints=17):
+                 num_joints=17,
+                 use_heatmap_loss=False):
         super().__init__()
 
         self.d_model = d_model
@@ -58,6 +62,58 @@ class DeformableTransformer(nn.Module):
         self.num_feature_levels = num_feature_levels
         self.decoder_share_query = decoder_share_query
         self.num_joints = num_joints
+        self.use_heatmap_loss = use_heatmap_loss
+
+        if self.use_heatmap_loss:
+            from mmcv.cnn import build_upsample_layer
+            num_layers = 1
+            num_kernels=[4]
+            num_filters=[256]
+
+            layers = []
+            for i in range(num_layers):
+                kernel, padding, output_padding = \
+                    self._get_deconv_cfg(num_kernels[i])
+
+                planes = num_filters[i]
+                layers.append(
+                    build_upsample_layer(
+                        dict(type='deconv'),
+                        in_channels=d_model,
+                        out_channels=planes,
+                        kernel_size=kernel,
+                        stride=2,
+                        padding=padding,
+                        output_padding=output_padding,
+                        bias=False))
+                layers.append(nn.BatchNorm2d(planes))
+                layers.append(nn.ReLU(inplace=True))
+                self.in_channels = planes
+
+            self.deconv_layer = nn.Sequential(*layers)
+            # import pdb
+            # pdb.set_trace()
+
+            self.final_layer = nn.Sequential(
+            # ConvModule(
+            #     d_model,
+            #     d_model,
+            #     kernel_size=3,
+            #     stride=1,
+            #     padding=1,
+            #     norm_cfg=dict(type='BN'),
+            #     act_cfg=dict(type='ReLU'),
+            #     inplace=True),
+                ConvModule(
+                    d_model,
+                    num_joints,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                    norm_cfg=None,
+                    act_cfg=None,
+                    inplace=False)
+            )
 
         encoder_layer = DeformableTransformerEncoderLayer(d_model, dim_feedforward,
                                                           dropout, activation,
@@ -99,6 +155,25 @@ class DeformableTransformer(nn.Module):
 
         self._reset_parameters()
 
+
+    @staticmethod
+    def _get_deconv_cfg(deconv_kernel):
+        """Get configurations for deconv layers."""
+        if deconv_kernel == 4:
+            padding = 1
+            output_padding = 0
+        elif deconv_kernel == 3:
+            padding = 1
+            output_padding = 1
+        elif deconv_kernel == 2:
+            padding = 0
+            output_padding = 0
+        else:
+            raise ValueError(f'Not supported num_kernels ({deconv_kernel}).')
+
+        return deconv_kernel, padding, output_padding
+
+
     def _reset_parameters(self):
         for p in self.parameters():
             if p.dim() > 1:
@@ -115,6 +190,19 @@ class DeformableTransformer(nn.Module):
                 xavier_uniform_(self.reference_points.weight.data, gain=1.0)
                 constant_(self.reference_points.bias.data, 0.)
         normal_(self.level_embed)
+
+        if self.use_heatmap_loss:
+            from mmcv.cnn import (build_upsample_layer, constant_init, normal_init)
+            for _, m in self.deconv_layer.named_modules():
+                if isinstance(m, nn.ConvTranspose2d):
+                    normal_init(m, std=0.001)
+                elif isinstance(m, nn.BatchNorm2d):
+                    constant_init(m, 1)
+            for m in self.final_layer.modules():
+                if isinstance(m, nn.Conv2d):
+                    normal_init(m, std=0.001, bias=0)
+                elif isinstance(m, nn.BatchNorm2d):
+                    constant_init(m, 1)
 
     def get_proposal_pos_embed(self, proposals):
         num_pos_feats = 128
@@ -201,8 +289,6 @@ class DeformableTransformer(nn.Module):
         # tensor([ 0, 48, 60, 64], device='cuda:0')
         level_start_index = torch.cat((spatial_shapes.new_zeros((1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
         # torch.Size([bs, 4, 2])
-        # import pdb
-        # pdb.set_trace()
         # valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
         valid_ratios = torch.ones([src_flatten.size(0), self.num_feature_levels, 2],
                         dtype=torch.float, device=src_flatten.device)
@@ -254,8 +340,39 @@ class DeformableTransformer(nn.Module):
                                                 spatial_shapes, level_start_index, valid_ratios,
                                                 query_embed)
         inter_references_out = inter_references
-            # import pdb
-            # pdb.set_trace()
+
+        if self.use_heatmap_loss:
+            # memory.resize(memory[:, :level_start_index[1], :].size(0), 256, spatial_shapes[0][0], spatial_shapes[0][1]
+            # [bs, concat_feats, hidden_dim] -> [bs, hidden_dim, concat_feats] ->
+
+            if self.num_feature_levels == 3:
+                h = spatial_shapes[0][0]
+                w = spatial_shapes[0][1]
+                x = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
+            elif self.num_feature_levels == 4:
+                h = spatial_shapes[1][0]
+                w = spatial_shapes[1][1]
+                x = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h, w)
+            else:
+                raise NotImplementedError
+
+            x = self.deconv_layer(x)
+
+            if self.num_feature_levels == 4:
+                # import pdb
+                # pdb.set_trace()
+                h = spatial_shapes[0][0]
+                w = spatial_shapes[0][1]
+                memory_s2 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
+                out_heatmap = self.final_layer(x + memory_s2)
+
+                # x = F.interpolate(x, size=(64, 48), mode='bilinear', align_corners=True)
+                # out_heatmap = self.output_proj_layers(x
+            else:
+                out_heatmap = self.final_layer(x)
+
+            return hs, init_reference_out, inter_references_out, out_heatmap
+
         return hs, init_reference_out, inter_references_out
 
 

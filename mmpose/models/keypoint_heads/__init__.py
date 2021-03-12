@@ -4,12 +4,15 @@ from .fc_head import FcHead
 from .top_down_multi_stage_head import TopDownMSMUHead, TopDownMultiStageHead
 from .top_down_simple_head import TopDownSimpleHead
 from .top_down_coord_head import TransHead
-from .top_down_coord_hp_head import OneQueryTransHead, SimpleBaselineOneQueryTransHead
+from .top_down_coord_hp_head import OneQueryTransHead, SimpleBaselineOneQueryTransHead, HybridTransHead
 
 from .multi_layer_fc_head import MultiLayerFcHead
 __all__ = [
     'TopDownSimpleHead', 'TopDownMultiStageHead', 'TopDownMSMUHead',
     'BottomUpHigherResolutionHead', 'BottomUpSimpleHead', 'FcHead',
-    'TransHead', 'MultiLayerFcHead',
-    'OneQueryTransHead', 'SimpleBaselineOneQueryTransHead'
+    'TransHead',
+    'MultiLayerFcHead',
+    'OneQueryTransHead',
+    'SimpleBaselineOneQueryTransHead',
+    'HybridTransHead'
 ]

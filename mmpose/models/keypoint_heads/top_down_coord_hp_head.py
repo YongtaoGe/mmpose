@@ -930,3 +930,370 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
             nn.init.constant_(self.transformer.decoder.coord_embed[j].layers[-1].bias.data, 0)
         nn.init.constant_(self.transformer.decoder.coord_embed[0].layers[-1].bias.data[2:], -2.0)
 
+
+
+
+
+
+@HEADS.register_module()
+class HybridTransHead(nn.Module):
+    """Top-down model head of simple baseline paper ref: Bin Xiao. ``Simple
+    Baselines for Human Pose Estimation and Tracking``.
+
+    TopDownSimpleHead is consisted of (>=0) number of deconv layers
+    and a simple conv2d layer.
+
+    Args:
+        in_channels (int): Number of input channels
+        out_channels (int): Number of output channels
+        num_deconv_layers (int): Number of deconv layers.
+            num_deconv_layers should >= 0. Note that 0 means
+            no deconv layers.
+        num_deconv_filters (list|tuple): Number of filters.
+            If num_deconv_layers > 0, the length of
+        num_deconv_kernels (list|tuple): Kernel sizes.
+        in_index (int|Sequence[int]): Input feature index. Default: -1
+        input_transform (str|None): Transformation type of input features.
+            Options: 'resize_concat', 'multiple_select', None.
+            'resize_concat': Multiple feature maps will be resize to the
+                same size as first one and than concat together.
+                Usually used in FCN head of HRNet.
+            'multiple_select': Multiple feature maps will be bundle into
+                a list and passed into decode head.
+            None: Only one select feature map is allowed.
+            Default: None.
+        align_corners (bool): align_corners argument of F.interpolate.
+            Default: False.
+        loss_keypoint (dict): Config for keypoint loss. Default: None.
+    """
+
+    def __init__(self,
+                 # in_channels,
+                 train_cfg=None,
+                 test_cfg=None,
+                 num_encoder_layers=0,
+                 num_decoder_layers=6,
+                 decoder_layer_type="deformable",
+                 heatmap_size=[64, 48],
+                 num_joints=17,
+                 loss_coord_keypoint=None,
+                 loss_hp_keypoint=None,
+                 num_stages=1,
+                 hidden_dim=256,
+                 neck_type="SimpleBaselineNeck",
+                 with_box_refine=True,
+                 use_heatmap_loss=True,
+                 num_levels=3,
+                 ):
+        super().__init__()
+        self.backbone_out_channels = {0:256, 1:256, 2:256, 3:256}
+        # self.out_indices = out_indices
+        self.num_levels = num_levels
+        self.num_stages = num_stages
+        # self.in_channels = in_channels
+        self.num_joints = num_joints
+        self.num_encoder_layers = num_encoder_layers
+        self.num_decoder_layers = num_decoder_layers
+        self.neck_type=neck_type
+        self.heatmap_size=heatmap_size
+        self.loss_coord = build_loss(loss_coord_keypoint)
+        self.loss_hp = build_loss(loss_hp_keypoint)
+        self.use_heatmap_loss = use_heatmap_loss
+
+        self.train_cfg = {} if train_cfg is None else train_cfg
+        self.test_cfg = {} if test_cfg is None else test_cfg
+
+        self.hidden_dim = hidden_dim
+
+        self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
+        self.query_embed = nn.Embedding(num_joints, hidden_dim * 2)
+
+        # self.transformer = OneQueryDeformableTransformer(
+        self.transformer = DeformableTransformer(
+                    d_model=self.hidden_dim,
+                    nhead=8,
+                    num_encoder_layers=num_encoder_layers,
+                    num_decoder_layers=num_decoder_layers,
+                    decoder_layer_type=decoder_layer_type,
+                    dim_feedforward=1024,
+                    dropout=0.1,
+                    activation="relu",
+                    return_intermediate_dec=True,
+                    num_feature_levels=self.num_levels,
+                    dec_n_points=4,
+                    enc_n_points=4,
+                    hidden_dim=hidden_dim,
+                    with_box_refine=with_box_refine,
+                    two_stage=False,
+                    two_stage_num_proposals=1,
+                    use_heatmap_loss=use_heatmap_loss,
+                )
+
+    def forward(self, feat_for_all_stages):
+
+        if self.neck_type == 'FPN':
+            feat_for_all_stages = [feat_for_all_stages]
+
+        outputs_coords = []
+        hs_for_all_stages, inter_references_for_all_stages = [], []
+
+        for stage_i, feat_for_one_stage in enumerate(feat_for_all_stages):
+            pos_embeds_for_one_stage = [self.position_embedding(feat) for feat in feat_for_one_stage]
+            if self.neck_type == 'FPN':
+                feat_for_one_stage = feat_for_one_stage[::-1]
+                pos_embeds_for_one_stage = pos_embeds_for_one_stage[::-1]
+
+            query_embed = self.query_embed.weight
+
+            if stage_i == 0:
+                if self.use_heatmap_loss:
+                    hs, init_reference, inter_references, outputs_hp = \
+                        self.transformer(feat_for_one_stage, pos_embeds_for_one_stage, query_embed)
+                else:
+                    raise NotImplementedError
+            else:
+                raise NotImplementedError
+
+            hs_for_all_stages.append(hs)
+            inter_references_for_all_stages.append(inter_references)
+
+        hs = torch.cat(hs_for_all_stages, 0)
+        inter_references = torch.cat(inter_references_for_all_stages, 0)
+
+        for lvl in range(hs.shape[0]):
+            stage_i = lvl // self.num_decoder_layers
+            stage_lvl = lvl % self.num_decoder_layers
+            if lvl == 0:
+                reference = init_reference
+            else:
+                reference = inter_references[lvl - 1]
+            reference = inverse_sigmoid(reference)
+            # outputs_class = self.class_embed[lvl](hs[lvl])
+            tmp = self.transformer.decoder.coord_embed[stage_lvl](hs[lvl])
+            # debug_tmp.append(tmp)
+            if reference.shape[-1] == 4:
+                tmp += reference
+            else:
+                assert reference.shape[-1] == 2
+                tmp[..., :2] += reference
+            outputs_coord = tmp.sigmoid()
+            # outputs_classes.append(outputs_class)
+            outputs_coords.append(outputs_coord)
+
+        # outputs_class = torch.stack(outputs_classes)
+        outputs_coord = torch.stack(outputs_coords)
+        # import pdb
+        # pdb.set_trace()
+        outputs = {
+            "coord": outputs_coord,
+            "hp": outputs_hp
+        }
+        return outputs
+
+
+    def get_loss(self, output, coord_target, coord_target_weight, hp_target, hp_target_weight):
+        losses = dict()
+        coord_output = output["coord"]
+        hp_output = output["hp"]
+        coord_loss = self.get_coord_loss(coord_output, coord_target, coord_target_weight)
+        hp_loss = self.get_hp_loss(hp_output, hp_target, hp_target_weight)
+        losses.update(coord_loss)
+        losses.update(hp_loss)
+
+        return losses
+
+    def get_hp_loss(self, output, target, target_weight):
+        """Calculate top-down keypoint loss.
+
+        Note:
+            batch_size: N
+            num_keypoints: K
+            heatmaps height: H
+            heatmaps weight: W
+
+        Args:
+            output (torch.Tensor[NxKxHxW]): Output heatmaps.
+            target (torch.Tensor[NxKxHxW]): Target heatmaps.
+            target_weight (torch.Tensor[NxKx1]):
+                Weights across different joint types.
+        """
+
+        losses = dict()
+        assert not isinstance(self.loss_hp, nn.Sequential)
+        assert target.dim() == 4 and target_weight.dim() == 3
+        losses['mse_loss'] = self.loss_hp(output, target, target_weight)
+        # import pdb
+        # pdb.set_trace()
+        return losses
+
+    def get_coord_loss(self, output, target, target_weight):
+        """Calculate top-down keypoint loss.
+
+        Note:
+            batch_size: N
+            num_keypoints: K
+
+        Args:
+            output (torch.Tensor[num_layers, N, K, 2]): Output keypoints.
+            target (torch.Tensor[N, K, 2]): Target keypoints.
+            target_weight (torch.Tensor[N, K, 2]):
+                Weights across different joint types.
+        """
+        losses = dict()
+        assert not isinstance(self.loss_coord, nn.Sequential)
+        assert target.dim() == 3 and target_weight.dim() == 3
+        # losses['reg_loss'] = self.loss(output[-1], target, target_weight).sum()
+        losses['reg_loss'] = self.loss_coord(output[-1], target, target_weight)
+        if output.dim() == 4:
+            num_decode_layers = output.size(0)
+            for i in range(num_decode_layers - 1):
+                # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                losses['reg_loss'] += self.loss_coord(output[i], target, target_weight)
+        else:
+            losses['reg_loss'] = self.loss_coord(output, target, target_weight)
+        #
+        # ############
+        #     if isinstance(self.loss, nn.Sequential):
+        #         assert len(self.loss) == len(output)
+        #     for i in range(len(output)):
+        #         target_i = target
+        #         target_weight_i = target_weight
+        #         if isinstance(self.loss, nn.Sequential):
+        #             loss_func = self.loss[i]
+        #         else:
+        #             loss_func = self.loss
+        #         loss_i = loss_func(output[i], target_i, target_weight_i)
+        #         if 'reg_loss' not in losses:
+        #             losses['reg_loss'] = loss_i
+        #         else:
+        #             losses['reg_loss'] += loss_i
+
+        return losses
+
+    def get_accuracy(self, output, coord_target, coord_target_weight, hp_target, hp_target_weight):
+        """Calculate accuracy for top-down keypoint loss.
+
+        Note:
+            batch_size: N
+            num_keypoints: K
+
+        Args:
+            output (torch.Tensor[N, K, 2]): Output keypoints.
+            target (torch.Tensor[N, K, 2]): Target keypoints.
+            target_weight (torch.Tensor[N, K, 2]):
+                Weights across different joint types.
+        """
+        coord_output = output["coord"]
+        hp_output = output["hp"]
+        accuracy = dict()
+        if coord_output.dim() == 4:
+            coord_output = coord_output[-1]
+        N = coord_output.shape[0]
+
+        _, avg_acc, cnt = keypoint_pck_accuracy(
+            coord_output.detach().cpu().numpy(),
+            coord_target.detach().cpu().numpy(),
+            coord_target_weight[:, :, 0].detach().cpu().numpy() > 0,
+            thr=0.05,
+            normalize=np.ones((N, 2), dtype=np.float32))
+        accuracy['coord_acc'] = avg_acc
+
+        _, avg_acc, _ = pose_pck_accuracy(
+            hp_output.detach().cpu().numpy(),
+            hp_target.detach().cpu().numpy(),
+            hp_target_weight.detach().cpu().numpy().squeeze(-1) > 0)
+        accuracy['hp_acc'] = float(avg_acc)
+
+        return accuracy
+
+    def inference_model(self, x, flip_pairs=None):
+        """Inference function.
+
+        Returns:
+            output_regression (np.ndarray): Output regression.
+
+        Args:
+            x (torch.Tensor[N, K, 2]): Input features.
+            flip_pairs (None | list[tuple()):
+                Pairs of keypoints which are mirrored.
+        """
+        output = self.forward(x)
+        coord_output = output["coord"]
+        hp_output = output["hp"]
+
+        if coord_output.dim() == 4:
+            output = coord_output[-1]
+
+        if flip_pairs is not None:
+            output_regression = fliplr_regression(
+                output.detach().cpu().numpy(), flip_pairs)
+        else:
+            output_regression = output.detach().cpu().numpy()
+        return output_regression
+
+    def decode_keypoints(self, img_metas, output_regression, img_size):
+        """Decode keypoints from output regression.
+
+        Args:
+            img_metas (list(dict)): Information about data augmentation
+                By default this includes:
+                - "image_file: path to the image file
+                - "center": center of the bbox
+                - "scale": scale of the bbox
+                - "rotation": rotation of the bbox
+                - "bbox_score": score of bbox
+            output_regression (np.ndarray[N, K, 2]): model
+                predicted regression vector.
+            img_size (tuple(img_width, img_height)): model input image size.
+        """
+        batch_size = len(img_metas)
+
+        if 'bbox_id' in img_metas[0]:
+            bbox_ids = []
+        else:
+            bbox_ids = None
+
+        c = np.zeros((batch_size, 2), dtype=np.float32)
+        s = np.zeros((batch_size, 2), dtype=np.float32)
+        image_paths = []
+        score = np.ones(batch_size)
+        for i in range(batch_size):
+            c[i, :] = img_metas[i]['center']
+            s[i, :] = img_metas[i]['scale']
+            image_paths.append(img_metas[i]['image_file'])
+
+            if 'bbox_score' in img_metas[i]:
+                score[i] = np.array(img_metas[i]['bbox_score']).reshape(-1)
+            if bbox_ids is not None:
+                bbox_ids.append(img_metas[i]['bbox_id'])
+
+        preds, maxvals = keypoints_from_regression(output_regression, c, s,
+                                                   img_size)
+
+        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
+        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+        all_preds[:, :, 0:2] = preds[:, :, 0:2]
+        all_preds[:, :, 2:3] = maxvals
+        all_boxes[:, 0:2] = c[:, 0:2]
+        all_boxes[:, 2:4] = s[:, 0:2]
+        all_boxes[:, 4] = np.prod(s * 200.0, axis=1)
+        all_boxes[:, 5] = score
+
+        result = {}
+
+        result['preds'] = all_preds
+        result['boxes'] = all_boxes
+        result['image_paths'] = image_paths
+        result['bbox_ids'] = bbox_ids
+
+        return result
+
+
+    def init_weights(self):
+        for j in range(len(self.transformer.decoder.coord_embed)):
+            normal_init(self.transformer.decoder.coord_embed[j].layers[0], mean=0, std=0.01, bias=0)
+            normal_init(self.transformer.decoder.coord_embed[j].layers[1], mean=0, std=0.01, bias=0)
+
+            nn.init.constant_(self.transformer.decoder.coord_embed[j].layers[-1].weight.data, 0)
+            nn.init.constant_(self.transformer.decoder.coord_embed[j].layers[-1].bias.data, 0)
+        nn.init.constant_(self.transformer.decoder.coord_embed[0].layers[-1].bias.data[2:], -2.0)
