@@ -95,7 +95,7 @@ model = dict(
         num_joints=channel_cfg['num_output_channels'],
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
         # loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
-        loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True, loss_weight=1),
+        loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True, loss_weight=10),
         loss_coord_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=1),
         # in_channels=2048,
         # out_indices=(1, 2, 3),
@@ -144,7 +144,7 @@ train_pipeline = [
         num_joints_half_body=8,
         prob_half_body=0.3),
     dict(
-        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.5),
+        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.25),
     dict(type='TopDownAffine'),
     dict(type='ToTensor'),
     dict(
@@ -157,6 +157,7 @@ train_pipeline = [
     #     encoding='Megvii'),
     dict(
         type='TopDownGenerateCoordAndHeatMapTarget',
+        encoding='UDP',
         sigma=2),
     dict(
         type='Collect',

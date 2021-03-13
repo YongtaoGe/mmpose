@@ -66,9 +66,13 @@ class DeformableTransformer(nn.Module):
 
         if self.use_heatmap_loss:
             from mmcv.cnn import build_upsample_layer
-            num_layers = 1
-            num_kernels=[4]
-            num_filters=[256]
+            # num_layers = 1
+            # num_kernels=[4]
+            # num_filters=[256]
+
+            num_layers = 3
+            num_kernels=[4,4,4]
+            num_filters=[256, 256, 256]
 
             layers = []
             for i in range(num_layers):
@@ -76,16 +80,29 @@ class DeformableTransformer(nn.Module):
                     self._get_deconv_cfg(num_kernels[i])
 
                 planes = num_filters[i]
-                layers.append(
-                    build_upsample_layer(
-                        dict(type='deconv'),
-                        in_channels=d_model,
-                        out_channels=planes,
-                        kernel_size=kernel,
-                        stride=2,
-                        padding=padding,
-                        output_padding=output_padding,
-                        bias=False))
+                if i==0:
+                    layers.append(
+                        build_upsample_layer(
+                            dict(type='deconv'),
+                            in_channels=d_model,
+                            out_channels=planes,
+                            kernel_size=kernel,
+                            stride=2,
+                            padding=padding,
+                            output_padding=output_padding,
+                            bias=False))
+                else:
+                    layers.append(
+                        build_upsample_layer(
+                            dict(type='deconv'),
+                            in_channels=planes,
+                            out_channels=planes,
+                            kernel_size=kernel,
+                            stride=2,
+                            padding=padding,
+                            output_padding=output_padding,
+                            bias=False))
+
                 layers.append(nn.BatchNorm2d(planes))
                 layers.append(nn.ReLU(inplace=True))
                 self.in_channels = planes
@@ -345,27 +362,33 @@ class DeformableTransformer(nn.Module):
             # memory.resize(memory[:, :level_start_index[1], :].size(0), 256, spatial_shapes[0][0], spatial_shapes[0][1]
             # [bs, concat_feats, hidden_dim] -> [bs, hidden_dim, concat_feats] ->
 
-            if self.num_feature_levels == 3:
-                h = spatial_shapes[0][0]
-                w = spatial_shapes[0][1]
-                x = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
-            elif self.num_feature_levels == 4:
-                h = spatial_shapes[1][0]
-                w = spatial_shapes[1][1]
-                x = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h, w)
-            else:
-                raise NotImplementedError
+            # if self.num_feature_levels == 3:
+            #     h = spatial_shapes[0][0]
+            #     w = spatial_shapes[0][1]
+            #     x = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
+            # elif self.num_feature_levels == 4:
+            #     h = spatial_shapes[1][0]
+            #     w = spatial_shapes[1][1]
+            #     x = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h, w)
+            # else:
+            #     raise NotImplementedError
 
+            h = spatial_shapes[-1][0]
+            w = spatial_shapes[-1][1]
+            x = memory.permute(0, 2, 1)[:, :, level_start_index[-1]:].contiguous().view(bs, c, h, w)
+            # import pdb
+            # pdb.set_trace()
             x = self.deconv_layer(x)
+            out_heatmap = self.final_layer(x)
 
-            if self.num_feature_levels == 4:
+            # if self.num_feature_levels == 4:
                 # h = spatial_shapes[0][0]
                 # w = spatial_shapes[0][1]
                 # memory_s2 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
                 # out_heatmap = self.final_layer(x + memory_s2)
-                out_heatmap = self.final_layer(x)
-            else:
-                out_heatmap = self.final_layer(x)
+            #     out_heatmap = self.final_layer(x)
+            # else:
+            #     out_heatmap = self.final_layer(x)
 
             return hs, init_reference_out, inter_references_out, out_heatmap
 

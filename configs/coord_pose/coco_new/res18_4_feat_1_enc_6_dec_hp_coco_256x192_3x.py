@@ -86,10 +86,10 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='CoordAndHeatmapTopDown',
-    pretrained='torchvision://resnet50',
-    backbone=dict(type='ResNet', depth=50, num_stages=4, out_indices=(0, 1, 2, 3)),
+    pretrained='torchvision://resnet18',
+    backbone=dict(type='ResNet', depth=18, num_stages=4, out_indices=(0, 1, 2, 3)),
     # neck=dict(type='FPN', in_channels=[64, 128, 256, 512], out_channels=256, num_outs=4),
-    neck=dict(type='InputProj', in_channels=(256, 512, 1024, 2048), out_channel=256),
+    neck=dict(type='InputProj', in_channels=(64, 128, 256, 512), out_channel=256),
     keypoint_head=dict(
         type='HybridTransHead',
         num_joints=channel_cfg['num_output_channels'],
