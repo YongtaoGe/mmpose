@@ -359,15 +359,11 @@ class DeformableTransformer(nn.Module):
             x = self.deconv_layer(x)
 
             if self.num_feature_levels == 4:
-                # import pdb
-                # pdb.set_trace()
-                h = spatial_shapes[0][0]
-                w = spatial_shapes[0][1]
-                memory_s2 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
-                out_heatmap = self.final_layer(x + memory_s2)
-
-                # x = F.interpolate(x, size=(64, 48), mode='bilinear', align_corners=True)
-                # out_heatmap = self.output_proj_layers(x
+                # h = spatial_shapes[0][0]
+                # w = spatial_shapes[0][1]
+                # memory_s2 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
+                # out_heatmap = self.final_layer(x + memory_s2)
+                out_heatmap = self.final_layer(x)
             else:
                 out_heatmap = self.final_layer(x)
 
