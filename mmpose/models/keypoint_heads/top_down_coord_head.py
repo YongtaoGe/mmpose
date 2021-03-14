@@ -294,6 +294,8 @@ class TransHead(nn.Module):
             flip_pairs (None | list[tuple()):
                 Pairs of keypoints which are mirrored.
         """
+        # import pdb
+        # pdb.set_trace()
         output = self.forward(x)
         if output.dim() == 4:
             output = output[-1]
