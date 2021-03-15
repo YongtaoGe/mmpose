@@ -298,7 +298,7 @@ class TransHead(nn.Module):
         # pdb.set_trace()
         output = self.forward(x)
         if output.dim() == 4:
-            output = output[-1]
+            output = output[3]
 
         if flip_pairs is not None:
             output_regression = fliplr_regression(
