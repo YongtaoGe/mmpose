@@ -1027,6 +1027,7 @@ class HybridTransHead(nn.Module):
                     two_stage=False,
                     two_stage_num_proposals=1,
                     use_heatmap_loss=use_heatmap_loss,
+                    num_joints=self.num_joints,
                 )
 
     def forward(self, feat_for_all_stages):
@@ -1095,6 +1096,8 @@ class HybridTransHead(nn.Module):
         losses = dict()
         coord_output = output["coord"]
         hp_output = output["hp"]
+        # import pdb
+        # pdb.set_trace()
         coord_loss = self.get_coord_loss(coord_output, coord_target, coord_target_weight)
         hp_loss = self.get_hp_loss(hp_output, hp_target, hp_target_weight)
         losses.update(coord_loss)
