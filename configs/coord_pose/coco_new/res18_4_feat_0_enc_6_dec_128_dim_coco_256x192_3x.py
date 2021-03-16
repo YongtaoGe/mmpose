@@ -89,7 +89,7 @@ model = dict(
     pretrained='torchvision://resnet18',
     backbone=dict(type='ResNet', depth=18, num_stages=4, out_indices=(0, 1, 2, 3)),
     # neck=dict(type='FPN', in_channels=[64, 128, 256, 512], out_channels=256, num_outs=4),
-    neck=dict(type='InputProj', in_channels=(64, 128, 256, 512), out_channel=256),
+    neck=dict(type='InputProj', in_channels=(64, 128, 256, 512), out_channel=128),
     keypoint_head=dict(
         type='TransHead',
         num_joints=channel_cfg['num_output_channels'],
@@ -104,6 +104,7 @@ model = dict(
         with_box_refine=True,
         num_stages=1,
         neck_type='InputProj',
+        hidden_dim=128,
     ),
     train_cfg=dict(),
     test_cfg = dict(
