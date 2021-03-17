@@ -93,7 +93,8 @@ model = dict(
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
         # loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
         loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True, loss_weight=50),
-        loss_coord_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=1),
+        loss_coord_keypoint=dict(type='WingLoss', use_target_weight=True, loss_weight=1),
+        # loss_coord_keypoint=dict(type='L2Loss', use_target_weight=True, loss_weight=1),
         # in_channels=2048,
         # out_indices=(1, 2, 3),
         num_levels=3,
@@ -200,7 +201,7 @@ data = dict(
         pipeline=val_pipeline),
     test=dict(
         type='TopDownMpiiDataset',
-        ann_file=f'{data_root}/annotations/mpii_test.json',
+        ann_file=f'{data_root}/annotations/mpii_val.json',
         img_prefix=f'{data_root}/images/',
         data_cfg=data_cfg,
         pipeline=test_pipeline),
