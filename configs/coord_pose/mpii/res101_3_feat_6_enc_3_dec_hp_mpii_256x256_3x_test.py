@@ -5,7 +5,7 @@ dist_params = dict(backend='nccl')
 workflow = [('train', 1)]
 checkpoint_config = dict(interval=10)
 # evaluation = dict(interval=25, metric='mAP', key_indicator='AP')
-evaluation = dict(interval=50, metric='PCKh', key_indicator='PCKh')
+evaluation = dict(interval=25, metric='PCKh', key_indicator='PCKh')
 optimizer = dict(
     type='AdamW',
     lr=4e-3,
@@ -83,7 +83,6 @@ channel_cfg = dict(
 model = dict(
     type='CoordAndHeatmapTopDown',
     pretrained='torchvision://resnet101',
-    # pretrained='./work_dirs/res101_3_feat_6_enc_3_dec_hp_mpii_256x256_3x/epoch_320.pth',
     backbone=dict(type='ResNet', depth=101, num_stages=4, out_indices=(1, 2, 3)),
     # neck=dict(type='FPN', in_channels=[64, 128, 256, 512], out_channels=256, num_outs=4),
     neck=dict(type='InputProj', in_channels=(512, 1024, 2048), out_channel=256),
@@ -93,7 +92,7 @@ model = dict(
         num_joints=channel_cfg['dataset_joints'],
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
         # loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
-        loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True, loss_weight=10),
+        loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True, loss_weight=50),
         loss_coord_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=1),
         # in_channels=2048,
         # out_indices=(1, 2, 3),

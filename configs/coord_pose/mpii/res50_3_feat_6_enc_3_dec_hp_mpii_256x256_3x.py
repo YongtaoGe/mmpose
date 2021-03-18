@@ -92,7 +92,7 @@ model = dict(
         num_joints=channel_cfg['dataset_joints'],
         # loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True, loss_weight=1000),
         # loss_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=40),
-        loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True, loss_weight=50),
+        loss_hp_keypoint=dict(type='JointsMSELoss', use_target_weight=True, loss_weight=10),
         loss_coord_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=1),
         # in_channels=2048,
         # out_indices=(1, 2, 3),
