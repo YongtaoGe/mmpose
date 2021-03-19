@@ -52,7 +52,8 @@ class DeformableTransformer(nn.Module):
                  two_stage=False, two_stage_num_proposals=300,
                  decoder_layer_type="deformable", decoder_use_self_attn=True, decoder_share_query=False,
                  num_joints=17,
-                 use_heatmap_loss=False):
+                 use_heatmap_loss=False,
+                 use_multi_stage_memory=False):
         super().__init__()
 
         self.d_model = d_model
@@ -63,74 +64,79 @@ class DeformableTransformer(nn.Module):
         self.decoder_share_query = decoder_share_query
         self.num_joints = num_joints
         self.use_heatmap_loss = use_heatmap_loss
+        self.use_multi_stage_memory = use_multi_stage_memory
 
         if self.use_heatmap_loss:
             from mmcv.cnn import build_upsample_layer
             # num_layers = 1
             # num_kernels=[4]
             # num_filters=[256]
+            if self.use_multi_stage_memory:
+                # rsn style
+                from mmpose.models.keypoint_heads.top_down_multi_stage_head import PredictHeatmap
+                final_layer = []
+                for i in range(self.num_feature_levels):
+                    final_layer.append(
+                        PredictHeatmap(
+                            unit_channels=d_model,
+                            out_channels=num_joints,
+                            out_shape=(64, 48),
+                            use_prm=False,
+                            norm_cfg=dict(type='BN'))
 
-            num_layers = 3
-            num_kernels=[4,4,4]
-            num_filters=[256, 256, 256]
+                        )
+                self.final_layer = nn.Sequential(*final_layer)
+            else:
+                # simplebaseline style
+                num_layers = 3
+                num_kernels=[4, 4, 4]
+                num_filters=[256, 256, 256]
 
-            layers = []
-            for i in range(num_layers):
-                kernel, padding, output_padding = \
-                    self._get_deconv_cfg(num_kernels[i])
+                layers = []
+                for i in range(num_layers):
+                    kernel, padding, output_padding = \
+                        self._get_deconv_cfg(num_kernels[i])
 
-                planes = num_filters[i]
-                if i==0:
-                    layers.append(
-                        build_upsample_layer(
-                            dict(type='deconv'),
-                            in_channels=d_model,
-                            out_channels=planes,
-                            kernel_size=kernel,
-                            stride=2,
-                            padding=padding,
-                            output_padding=output_padding,
-                            bias=False))
-                else:
-                    layers.append(
-                        build_upsample_layer(
-                            dict(type='deconv'),
-                            in_channels=planes,
-                            out_channels=planes,
-                            kernel_size=kernel,
-                            stride=2,
-                            padding=padding,
-                            output_padding=output_padding,
-                            bias=False))
+                    planes = num_filters[i]
+                    if i==0:
+                        layers.append(
+                            build_upsample_layer(
+                                dict(type='deconv'),
+                                in_channels=d_model,
+                                out_channels=planes,
+                                kernel_size=kernel,
+                                stride=2,
+                                padding=padding,
+                                output_padding=output_padding,
+                                bias=False))
+                    else:
+                        layers.append(
+                            build_upsample_layer(
+                                dict(type='deconv'),
+                                in_channels=planes,
+                                out_channels=planes,
+                                kernel_size=kernel,
+                                stride=2,
+                                padding=padding,
+                                output_padding=output_padding,
+                                bias=False))
 
-                layers.append(nn.BatchNorm2d(planes))
-                layers.append(nn.ReLU(inplace=True))
-                self.in_channels = planes
+                    layers.append(nn.BatchNorm2d(planes))
+                    layers.append(nn.ReLU(inplace=True))
+                    self.in_channels = planes
 
-            self.deconv_layer = nn.Sequential(*layers)
-            # import pdb
-            # pdb.set_trace()
-
-            self.final_layer = nn.Sequential(
-            # ConvModule(
-            #     d_model,
-            #     d_model,
-            #     kernel_size=3,
-            #     stride=1,
-            #     padding=1,
-            #     norm_cfg=dict(type='BN'),
-            #     act_cfg=dict(type='ReLU'),
-            #     inplace=True),
-                ConvModule(
-                    d_model,
-                    num_joints,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    norm_cfg=None,
-                    act_cfg=None,
-                    inplace=False)
-            )
+                self.deconv_layer = nn.Sequential(*layers)
+                self.final_layer = nn.Sequential(
+                    ConvModule(
+                        d_model,
+                        num_joints,
+                        kernel_size=1,
+                        stride=1,
+                        padding=0,
+                        norm_cfg=None,
+                        act_cfg=None,
+                        inplace=False)
+                )
 
         encoder_layer = DeformableTransformerEncoderLayer(d_model, dim_feedforward,
                                                           dropout, activation,
@@ -209,17 +215,27 @@ class DeformableTransformer(nn.Module):
         normal_(self.level_embed)
 
         if self.use_heatmap_loss:
-            from mmcv.cnn import (build_upsample_layer, constant_init, normal_init)
-            for _, m in self.deconv_layer.named_modules():
-                if isinstance(m, nn.ConvTranspose2d):
-                    normal_init(m, std=0.001)
-                elif isinstance(m, nn.BatchNorm2d):
-                    constant_init(m, 1)
-            for m in self.final_layer.modules():
-                if isinstance(m, nn.Conv2d):
-                    normal_init(m, std=0.001, bias=0)
-                elif isinstance(m, nn.BatchNorm2d):
-                    constant_init(m, 1)
+            if self.use_multi_stage_memory:
+                from mmcv.cnn import kaiming_init, normal_init, constant_init
+                for m in self.final_layer.modules():
+                    if isinstance(m, nn.Conv2d):
+                        kaiming_init(m)
+                    elif isinstance(m, nn.BatchNorm2d):
+                        constant_init(m, 1)
+                    elif isinstance(m, nn.Linear):
+                        normal_init(m, std=0.01)
+            else:
+                from mmcv.cnn import (build_upsample_layer, constant_init, normal_init)
+                for _, m in self.deconv_layer.named_modules():
+                    if isinstance(m, nn.ConvTranspose2d):
+                        normal_init(m, std=0.001)
+                    elif isinstance(m, nn.BatchNorm2d):
+                        constant_init(m, 1)
+                for m in self.final_layer.modules():
+                    if isinstance(m, nn.Conv2d):
+                        normal_init(m, std=0.001, bias=0)
+                    elif isinstance(m, nn.BatchNorm2d):
+                        constant_init(m, 1)
 
     def get_proposal_pos_embed(self, proposals):
         num_pos_feats = 128
@@ -372,14 +388,38 @@ class DeformableTransformer(nn.Module):
             #     x = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h, w)
             # else:
             #     raise NotImplementedError
+            if self.use_multi_stage_memory:
+                if self.num_feature_levels == 3:
+                    out_heatmap_list = []
+                    h_c3, w_c3 = spatial_shapes[0][0], spatial_shapes[0][1]
+                    h_c4, w_c4 = spatial_shapes[1][0], spatial_shapes[1][1]
+                    h_c5, w_c5 = spatial_shapes[2][0], spatial_shapes[2][1]
 
-            h = spatial_shapes[-1][0]
-            w = spatial_shapes[-1][1]
-            x = memory.permute(0, 2, 1)[:, :, level_start_index[-1]:].contiguous().view(bs, c, h, w)
-            # import pdb
-            # pdb.set_trace()
-            x = self.deconv_layer(x)
-            out_heatmap = self.final_layer(x)
+
+                    memory_c3 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h_c3, w_c3)
+                    memory_c4 = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h_c4, w_c4)
+                    memory_c5 = memory.permute(0, 2, 1)[:, :, level_start_index[2]:].contiguous().view(bs, c, h_c5, w_c5)
+
+                    out_hp_c3 = self.final_layer[0](memory_c3)
+                    out_hp_c4 = self.final_layer[1](memory_c4)
+                    out_hp_c5 = self.final_layer[2](memory_c5)
+
+                    out_heatmap_list.append(out_hp_c3)
+                    out_heatmap_list.append(out_hp_c4)
+                    out_heatmap_list.append(out_hp_c5)
+
+                    return hs, init_reference_out, inter_references_out, out_heatmap_list
+
+                else:
+                    raise NotImplementedError
+            else:
+                h = spatial_shapes[-1][0]
+                w = spatial_shapes[-1][1]
+                x = memory.permute(0, 2, 1)[:, :, level_start_index[-1]:].contiguous().view(bs, c, h, w)
+                # import pdb
+                # pdb.set_trace()
+                x = self.deconv_layer(x)
+                out_heatmap = self.final_layer(x)
 
             # if self.num_feature_levels == 4:
                 # h = spatial_shapes[0][0]
@@ -390,7 +430,7 @@ class DeformableTransformer(nn.Module):
             # else:
             #     out_heatmap = self.final_layer(x)
 
-            return hs, init_reference_out, inter_references_out, out_heatmap
+                return hs, init_reference_out, inter_references_out, out_heatmap
 
         return hs, init_reference_out, inter_references_out
 

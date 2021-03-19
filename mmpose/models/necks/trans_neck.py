@@ -379,3 +379,101 @@ class SimpleBaselineNeck(nn.Module):
                 normal_init(m, std=0.001, bias=0)
             elif isinstance(m, nn.BatchNorm2d):
                 constant_init(m, 1)
+
+
+
+from mmpose.models.keypoint_heads.top_down_multi_stage_head import PredictHeatmap
+import copy as cp
+from mmcv.cnn import kaiming_init, normal_init
+@NECKS.register_module()
+class RSNNeck(nn.Module):
+    """Heads for multi-stage multi-unit heads used in Multi-Stage Pose
+    estimation Network (MSPN), and Residual Steps Networks (RSN).
+
+    Args:
+        unit_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+        out_shape (tuple): Shape of the output heatmap.
+        num_stages (int): Number of stages.
+        num_units (int): Number of units in each stage.
+        use_prm (bool): Whether to use pose refine machine (PRM).
+            Default: False.
+        norm_cfg (dict): dictionary to construct and config norm layer.
+            Default: dict(type='BN')
+        loss_keypoint (dict): Config for keypoint loss. Default: None.
+    """
+
+    def __init__(self,
+                 out_shape=(64, 48),
+                 unit_channels=256,
+                 out_channels=17,
+                 num_stages=1,
+                 num_units=4,
+                 use_prm=False,
+                 norm_cfg=dict(type='BN')):
+        super().__init__()
+        # Protect mutable default arguments
+        norm_cfg = cp.deepcopy(norm_cfg)
+
+        self.out_shape = out_shape
+        self.unit_channels = unit_channels
+        self.out_channels = out_channels
+        self.num_stages = num_stages
+        self.num_units = num_units
+
+        # self.predict_layers = nn.ModuleList([])
+        # for i in range(self.num_stages):
+        #     for j in range(self.num_units):
+        #         self.predict_layers.append(
+        #             PredictHeatmap(
+        #                 unit_channels,
+        #                 out_channels,
+        #                 out_shape,
+        #                 use_prm,
+        #                 norm_cfg=norm_cfg))
+
+        self.predict_layer = PredictHeatmap(
+                            unit_channels,
+                            out_channels,
+                            out_shape,
+                            use_prm,
+                            norm_cfg=norm_cfg)
+
+    def forward(self, x):
+        """Forward function.
+
+        Returns:
+            out (list[Tensor]): a list of heatmaps from multiple stages
+                                and units.
+        """
+        # out = []
+        # import pdb
+        # pdb.set_trace()
+        assert isinstance(x, list)
+        assert len(x) == self.num_stages
+        assert isinstance(x[0], list)
+        assert len(x[0]) == self.num_units
+        assert x[0][0].shape[1] == self.unit_channels
+
+        # for i in range(self.num_stages):
+        #     for j in range(self.num_units):
+        #         y = self.predict_layers[i * self.num_units + j](x[i][j])
+        #         out.append(y)
+
+        feat_c2 = self.predict_layer(x[0][3])
+        feat_c3 = x[0][2]
+        feat_c4 = x[0][1]
+        feat_c5 = x[0][0]
+
+        return [[feat_c2, feat_c3, feat_c4, feat_c5]]
+
+
+    def init_weights(self):
+        """Initialize model weights."""
+        for m in self.predict_layer.modules():
+            if isinstance(m, nn.Conv2d):
+                kaiming_init(m)
+            elif isinstance(m, nn.BatchNorm2d):
+                constant_init(m, 1)
+            elif isinstance(m, nn.Linear):
+                normal_init(m, std=0.01)

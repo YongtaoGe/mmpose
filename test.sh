@@ -21,15 +21,15 @@
 #work_dirs/res101_3_feat_6_enc_6_dec_hp_coco_384x288_4x/epoch_360.pth 8 \
 #--eval mAP
 
-GPUS=8 CPUS_PER_TASK=2 \
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PORT=11128 ./tools/dist_test.sh \
-configs/coord_pose/coco_new/res50_3_feat_4_enc_6_dec_hp_coco_256x192_4x_test.py \
-work_dirs/res50_3_feat_4_enc_6_dec_hp_coco_256x192_4x/epoch_400.pth 8 \
---eval mAP
+#GPUS=8 CPUS_PER_TASK=2 \
+#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PORT=11128 ./tools/dist_test.sh \
+#configs/coord_pose/coco_new/res50_3_feat_4_enc_6_dec_hp_coco_256x192_4x_test.py \
+#work_dirs/res50_3_feat_4_enc_6_dec_hp_coco_256x192_4x/epoch_400.pth 8 \
+#--eval mAP
 
 
 GPUS=8 CPUS_PER_TASK=2 \
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PORT=11128 ./tools/dist_test.sh \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PORT=11129 ./tools/dist_test.sh \
 configs/coord_pose/coco_new/res50_3_feat_6_enc_6_dec_hp_coco_384x288_4x_test.py \
-work_dirs/res50_3_feat_6_enc_6_dec_hp_coco_384_288_4x/epoch_400.pth 8 \
+work_dirs/res50_3_feat_6_enc_6_dec_hp_coco_384x288_4x/epoch_400.pth 8 \
 --eval mAP

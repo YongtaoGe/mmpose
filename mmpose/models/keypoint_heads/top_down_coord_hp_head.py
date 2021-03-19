@@ -66,6 +66,9 @@ class OneQueryTransHead(nn.Module):
         self.neck_type=neck_type
         self.heatmap_size=heatmap_size
         self.loss_coord = build_loss(loss_coord_keypoint)
+        import pdb
+        pdb.set_trace()
+
         self.loss_hp = build_loss(loss_hp_keypoint)
 
 
@@ -638,6 +641,7 @@ class SimpleBaselineOneQueryTransHead(nn.Module):
 
         return outputs
 
+
     def forward11(self, input):
         """Forward function."""
         #[
@@ -983,6 +987,7 @@ class HybridTransHead(nn.Module):
                  neck_type="SimpleBaselineNeck",
                  with_box_refine=True,
                  use_heatmap_loss=True,
+                 use_multi_stage_memory=False,
                  num_levels=3,
                  ):
         super().__init__()
@@ -994,9 +999,12 @@ class HybridTransHead(nn.Module):
         self.num_joints = num_joints
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
+        self.use_multi_stage_memory = use_multi_stage_memory
         self.neck_type=neck_type
         self.heatmap_size=heatmap_size
         self.loss_coord = build_loss(loss_coord_keypoint)
+        assert num_decoder_layers == len(self.loss_coord)
+
         self.loss_hp = build_loss(loss_hp_keypoint)
         self.use_heatmap_loss = use_heatmap_loss
 
@@ -1027,10 +1035,15 @@ class HybridTransHead(nn.Module):
                     two_stage=False,
                     two_stage_num_proposals=1,
                     use_heatmap_loss=use_heatmap_loss,
+                    use_multi_stage_memory=use_multi_stage_memory,
                     num_joints=self.num_joints,
                 )
 
     def forward(self, feat_for_all_stages):
+
+        if self.neck_type == 'RSNNeck':
+            # feat_for_all_stages = feat_for_all_stages[0]
+            feat_c2 = feat_for_all_stages[0].pop(0)
 
         if self.neck_type == 'FPN':
             feat_for_all_stages = [feat_for_all_stages]
@@ -1085,6 +1098,10 @@ class HybridTransHead(nn.Module):
         outputs_coord = torch.stack(outputs_coords)
         # import pdb
         # pdb.set_trace()
+        if self.use_multi_stage_memory:
+            outputs_hp.insert(0, feat_c2)
+            outputs_hp = torch.stack(outputs_hp)
+
         outputs = {
             "coord": outputs_coord,
             "hp": outputs_hp
@@ -1122,9 +1139,21 @@ class HybridTransHead(nn.Module):
         """
 
         losses = dict()
-        assert not isinstance(self.loss_hp, nn.Sequential)
-        assert target.dim() == 4 and target_weight.dim() == 3
-        losses['mse_loss'] = self.loss_hp(output, target, target_weight)
+        # import pdb
+        # pdb.set_trace()
+        if isinstance(self.loss_hp, nn.Sequential):
+            assert len(self.loss_hp) == output.size(0)
+            assert target.dim() == 5 and target_weight.dim() == 4
+            num_hp_layers = output.size(0)
+            for i in range(num_hp_layers):
+                target_i = target[:, i, :, :, :]
+                target_weight_i = target_weight[:, i, :, :]
+                # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                losses['mse_loss_{}'.format(i)] = self.loss_hp[i](output[i], target_i, target_weight_i)
+
+        else:
+            assert target.dim() == 4 and target_weight.dim() == 3
+            losses['mse_loss'] = self.loss_hp(output, target, target_weight)
         # import pdb
         # pdb.set_trace()
         return losses
@@ -1143,17 +1172,20 @@ class HybridTransHead(nn.Module):
                 Weights across different joint types.
         """
         losses = dict()
-        assert not isinstance(self.loss_coord, nn.Sequential)
+        # import pdb
+        # pdb.set_trace()
+        # assert not isinstance(self.loss_coord, nn.Sequential)
         assert target.dim() == 3 and target_weight.dim() == 3
         # losses['reg_loss'] = self.loss(output[-1], target, target_weight).sum()
-        losses['reg_loss'] = self.loss_coord(output[-1], target, target_weight)
+        # losses['reg_loss'] = self.loss_coord(output[-1], target, target_weight)
+        # losses['reg_loss'] = 0
         if output.dim() == 4:
             num_decode_layers = output.size(0)
-            for i in range(num_decode_layers - 1):
+            for i in range(num_decode_layers):
                 # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
-                losses['reg_loss'] += self.loss_coord(output[i], target, target_weight)
+                losses['reg_loss_{}'.format(i)] = self.loss_coord[i](output[i], target, target_weight)
         else:
-            losses['reg_loss'] = self.loss_coord(output, target, target_weight)
+            raise NotImplementedError
         #
         # ############
         #     if isinstance(self.loss, nn.Sequential):
@@ -1201,11 +1233,20 @@ class HybridTransHead(nn.Module):
             normalize=np.ones((N, 2), dtype=np.float32))
         accuracy['coord_acc'] = avg_acc
 
-        _, avg_acc, _ = pose_pck_accuracy(
-            hp_output.detach().cpu().numpy(),
-            hp_target.detach().cpu().numpy(),
-            hp_target_weight.detach().cpu().numpy().squeeze(-1) > 0)
-        accuracy['hp_acc'] = float(avg_acc)
+        if self.use_heatmap_loss and self.use_multi_stage_memory:
+            assert hp_target.dim() == 5 and hp_target_weight.dim() == 4
+            _, avg_acc, _ = pose_pck_accuracy(
+                hp_output[0].detach().cpu().numpy(),
+                hp_target[:, 0, ...].detach().cpu().numpy(),
+                hp_target_weight[:, 0,
+                              ...].detach().cpu().numpy().squeeze(-1) > 0)
+            accuracy['hp_acc'] = float(avg_acc)
+        else:
+            _, avg_acc, _ = pose_pck_accuracy(
+                hp_output.detach().cpu().numpy(),
+                hp_target.detach().cpu().numpy(),
+                hp_target_weight.detach().cpu().numpy().squeeze(-1) > 0)
+            accuracy['hp_acc'] = float(avg_acc)
 
         return accuracy
 

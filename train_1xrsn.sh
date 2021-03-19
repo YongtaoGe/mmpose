@@ -1,1 +1,2 @@
-CUDA_VISIBLE_DEVICES=0,1,2,3 PORT=11118 ./tools/dist_train.sh configs/top_down/coord_pose/coco/rsn18_coco_256x192.py 4
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PORT=11138 ./tools/dist_train.sh \
+configs/coord_pose/coco_rsn/rsn18_3_feat_6_enc_6_dec_hp_coco_256x192_4x.py 8
