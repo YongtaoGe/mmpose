@@ -23,7 +23,7 @@ optimizer = dict(
 )
 
 optimizer_config = dict(
-                        grad_clip=dict(max_norm=1, norm_type=2),
+                        # grad_clip=dict(max_norm=1, norm_type=2),
                         # grad_clip=None,
                         # paramwise_cfg=dict(
                         #     custom_keys={
@@ -98,8 +98,8 @@ model = dict(
         # in_channels=2048,
         # out_indices=(1, 2, 3),
         num_levels=3,
-        num_encoder_layers=6,
-        num_decoder_layers=6,
+        num_encoder_layers=1,
+        num_decoder_layers=3,
         decoder_layer_type="deformable",
         # decoder_layer_type="standard",
         with_box_refine=True,
