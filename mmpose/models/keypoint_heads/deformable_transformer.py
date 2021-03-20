@@ -295,7 +295,6 @@ class DeformableTransformer(nn.Module):
 
     def forward(self, srcs, pos_embeds, query_embed=None):
         assert self.two_stage or query_embed is not None
-
         # prepare input for encoder
         src_flatten = []
         lvl_pos_embed_flatten = []
@@ -388,6 +387,8 @@ class DeformableTransformer(nn.Module):
             #     x = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h, w)
             # else:
             #     raise NotImplementedError
+            # import pdb
+            # pdb.set_trace()
             if self.use_multi_stage_memory:
                 if self.num_feature_levels == 3:
                     out_heatmap_list = []
@@ -416,20 +417,8 @@ class DeformableTransformer(nn.Module):
                 h = spatial_shapes[-1][0]
                 w = spatial_shapes[-1][1]
                 x = memory.permute(0, 2, 1)[:, :, level_start_index[-1]:].contiguous().view(bs, c, h, w)
-                # import pdb
-                # pdb.set_trace()
                 x = self.deconv_layer(x)
                 out_heatmap = self.final_layer(x)
-
-            # if self.num_feature_levels == 4:
-                # h = spatial_shapes[0][0]
-                # w = spatial_shapes[0][1]
-                # memory_s2 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h, w)
-                # out_heatmap = self.final_layer(x + memory_s2)
-            #     out_heatmap = self.final_layer(x)
-            # else:
-            #     out_heatmap = self.final_layer(x)
-
                 return hs, init_reference_out, inter_references_out, out_heatmap
 
         return hs, init_reference_out, inter_references_out

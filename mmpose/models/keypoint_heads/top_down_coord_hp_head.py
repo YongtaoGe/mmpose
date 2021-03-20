@@ -1003,7 +1003,7 @@ class HybridTransHead(nn.Module):
         self.neck_type=neck_type
         self.heatmap_size=heatmap_size
         self.loss_coord = build_loss(loss_coord_keypoint)
-        assert num_decoder_layers == len(self.loss_coord)
+        # assert num_decoder_layers == len(self.loss_coord)
 
         self.loss_hp = build_loss(loss_hp_keypoint)
         self.use_heatmap_loss = use_heatmap_loss
@@ -1040,12 +1040,14 @@ class HybridTransHead(nn.Module):
                 )
 
     def forward(self, feat_for_all_stages):
+        # if True:
+        #     return feat_for_all_stages
 
         if self.neck_type == 'RSNNeck':
             # feat_for_all_stages = feat_for_all_stages[0]
             feat_c2 = feat_for_all_stages[0].pop(0)
 
-        if self.neck_type == 'FPN':
+        if 'FPN' in self.neck_type:
             feat_for_all_stages = [feat_for_all_stages]
 
         outputs_coords = []
@@ -1061,6 +1063,8 @@ class HybridTransHead(nn.Module):
 
             if stage_i == 0:
                 if self.use_heatmap_loss:
+                    # import pdb
+                    # pdb.set_trace()
                     hs, init_reference, inter_references, outputs_hp = \
                         self.transformer(feat_for_one_stage, pos_embeds_for_one_stage, query_embed)
                 else:
@@ -1096,8 +1100,7 @@ class HybridTransHead(nn.Module):
 
         # outputs_class = torch.stack(outputs_classes)
         outputs_coord = torch.stack(outputs_coords)
-        # import pdb
-        # pdb.set_trace()
+
         if self.use_multi_stage_memory:
             outputs_hp.insert(0, feat_c2)
             outputs_hp = torch.stack(outputs_hp)
@@ -1139,8 +1142,7 @@ class HybridTransHead(nn.Module):
         """
 
         losses = dict()
-        # import pdb
-        # pdb.set_trace()
+
         if isinstance(self.loss_hp, nn.Sequential):
             assert len(self.loss_hp) == output.size(0)
             assert target.dim() == 5 and target_weight.dim() == 4
@@ -1152,6 +1154,8 @@ class HybridTransHead(nn.Module):
                 losses['mse_loss_{}'.format(i)] = self.loss_hp[i](output[i], target_i, target_weight_i)
 
         else:
+            # import pdb
+            # pdb.set_trace()
             assert target.dim() == 4 and target_weight.dim() == 3
             losses['mse_loss'] = self.loss_hp(output, target, target_weight)
         # import pdb
@@ -1179,29 +1183,17 @@ class HybridTransHead(nn.Module):
         # losses['reg_loss'] = self.loss(output[-1], target, target_weight).sum()
         # losses['reg_loss'] = self.loss_coord(output[-1], target, target_weight)
         # losses['reg_loss'] = 0
-        if output.dim() == 4:
+        if output.dim() == 4 and isinstance(self.loss_coord, nn.Sequential):
+            assert self.num_decoder_layers == len(self.loss_coord)
             num_decode_layers = output.size(0)
             for i in range(num_decode_layers):
                 # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
                 losses['reg_loss_{}'.format(i)] = self.loss_coord[i](output[i], target, target_weight)
         else:
-            raise NotImplementedError
-        #
-        # ############
-        #     if isinstance(self.loss, nn.Sequential):
-        #         assert len(self.loss) == len(output)
-        #     for i in range(len(output)):
-        #         target_i = target
-        #         target_weight_i = target_weight
-        #         if isinstance(self.loss, nn.Sequential):
-        #             loss_func = self.loss[i]
-        #         else:
-        #             loss_func = self.loss
-        #         loss_i = loss_func(output[i], target_i, target_weight_i)
-        #         if 'reg_loss' not in losses:
-        #             losses['reg_loss'] = loss_i
-        #         else:
-        #             losses['reg_loss'] += loss_i
+            num_decode_layers = output.size(0)
+            for i in range(num_decode_layers):
+                # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                losses['reg_loss_{}'.format(i)] = self.loss_coord(output[i], target, target_weight)
 
         return losses
 

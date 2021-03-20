@@ -12,14 +12,16 @@ class InputProj(nn.Module):
     has a batch dimension of size 1, which can lead to unexpected errors.
     """
 
-    def __init__(self, in_channels, out_channel):
+    def __init__(self, in_channels, out_channel, backbone_type=None):
         super().__init__()
         self.input_proj = nn.ModuleList()
+        self.backbone_type = backbone_type
         for in_channel in in_channels:
             self.input_proj.append(
                     nn.Sequential(
                     nn.Conv2d(in_channel, out_channel, kernel_size=1),
-                    nn.GroupNorm(32, out_channel),
+                    # nn.GroupNorm(32, out_channel),
+                    nn.BatchNorm2d(out_channel),
                 ))
 
     def init_weights(self):
@@ -28,6 +30,9 @@ class InputProj(nn.Module):
             nn.init.constant_(proj[0].bias, 0)
 
     def forward(self, inputs):
+        if self.backbone_type == 'HRNet':
+            inputs = inputs[1:]
+            # inputs.pop(0)
 
         assert len(inputs) == len(self.input_proj)
         out_list = []

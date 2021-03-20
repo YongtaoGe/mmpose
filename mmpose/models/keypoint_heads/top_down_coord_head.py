@@ -37,7 +37,7 @@ class TransHead(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
+                 # in_channels,
                  num_joints,
                  loss_keypoint=None,
                  train_cfg=None,
@@ -51,14 +51,17 @@ class TransHead(nn.Module):
                  decoder_use_self_attn=True,
                  num_stages=1,
                  neck_type=None,
-                 decoder_share_query=False
+                 decoder_share_query=False,
+                 use_heatmap_loss=False,
+                 use_multi_stage_memory=False,
+                 num_levels=3,
                  ):
         super().__init__()
         self.backbone_out_channels = {0:256, 1:256, 2:256, 3:256}
         self.out_indices = out_indices
-        self.num_levels = len(out_indices)
+        self.num_levels = num_levels
         self.num_stages = num_stages
-        self.in_channels = in_channels
+        # self.in_channels = in_channels
         self.num_joints = num_joints
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
@@ -109,9 +112,12 @@ class TransHead(nn.Module):
                     two_stage_num_proposals=1,
                     decoder_use_self_attn=decoder_use_self_attn,
                     decoder_share_query=decoder_share_query,
-                    num_joints=num_joints
+                    num_joints=num_joints,
+                    use_heatmap_loss=use_heatmap_loss,
+                    use_multi_stage_memory=use_multi_stage_memory,
                 )
             )
+
         self.transformer = nn.Sequential(*transformer_modules)
 
 
@@ -135,11 +141,12 @@ class TransHead(nn.Module):
             # else:
             #     pos_embeds_for_one_stage = [self.position_embedding[i](feat) for i, feat in enumerate(feat_for_one_stage)]
 
-            feat_for_one_stage = feat_for_one_stage[::-1]
-            pos_embeds_for_one_stage = pos_embeds_for_one_stage[::-1]
+            # feat_for_one_stage = feat_for_one_stage[::-1]
+            # pos_embeds_for_one_stage = pos_embeds_for_one_stage[::-1]
 
             query_embed = self.query_embed.weight
             if stage_i == 0:
+
                 hs, init_reference, inter_references = \
                     self.transformer[stage_i](feat_for_one_stage, pos_embeds_for_one_stage, query_embed)
             else:

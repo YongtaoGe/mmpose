@@ -77,6 +77,8 @@ class HRFPN(nn.Module):
 
     def forward(self, inputs):
         """Forward function."""
+
+
         assert len(inputs) == self.num_ins
         outs = [inputs[0]]
         for i in range(1, self.num_ins):
@@ -98,4 +100,8 @@ class HRFPN(nn.Module):
             else:
                 tmp_out = self.fpn_convs[i](outs[i])
             outputs.append(tmp_out)
-        return tuple(outputs)
+
+        # import pdb
+        # pdb.set_trace()
+        # return tuple(outputs)
+        return outputs[1:]

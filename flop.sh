@@ -1,7 +1,9 @@
 
 #!/usr/bin/env bash
 PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
-python ./tools/analysis/coords_get_flops.py  configs/coord_pose/coco_new/res50_3_feat_6_enc_6_dec_coco_256x192_4x.py --shape 384 288
+python ./tools/analysis/coords_get_flops.py configs/coord_pose/coco_hrnet/hrnet_w32_3_feat_1_enc_3_dec_hp_coco_256x192_4x.py
+#python ./tools/analysis/coords_get_flops.py configs/coord_pose/coco_hrnet/hrnet_w32_3_feat_1_enc_3_dec_hp_coco_256x192_4x.py
+#python ./tools/analysis/coords_get_flops.py  configs/coord_pose/coco_new/res50_3_feat_6_enc_6_dec_coco_256x192_4x.py --shape 384 288
 #python ./tools/analysis/coords_get_flops.py  configs/coord_pose/coco_new/res101_3_feat_6_enc_6_dec_coco_256x192_3x.py
 #python ./tools/analysis/coords_get_flops.py  configs/coord_pose/coco_new/res18_4_feat_0_enc_6_dec_no_q2q_coco_256x192_3x.py
 #python ./tools/analysis/coords_get_flops.py  configs/coord_pose/coco_new/res101_3_feat_4_enc_6_dec_coco_256x192_3x.py

@@ -98,6 +98,8 @@ def main():
     model = build_posenet(cfg.model)
     model = model.cuda()
     model.eval()
+    import pdb
+    pdb.set_trace()
     model.forward = model.forward_dummy
 
     dump_input = torch.rand(input_shape).cuda()
