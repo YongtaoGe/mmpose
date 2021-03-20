@@ -94,7 +94,7 @@ model = dict(
         # loss_coord_keypoint=dict(type='L1Loss', use_target_weight=True, loss_weight=1),
         loss_coord_keypoint=[
                                 dict(type='L1Loss', use_target_weight=True, loss_weight=1)
-                            ] * 6,
+                            ] * 3,
         # in_channels=2048,
         # out_indices=(1, 2, 3),
         num_levels=3,
