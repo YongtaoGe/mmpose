@@ -437,7 +437,28 @@ class RSNNeck(nn.Module):
         #                 use_prm,
         #                 norm_cfg=norm_cfg))
 
-        self.predict_layer = PredictHeatmap(
+        self.predict_layer_c2 = PredictHeatmap(
+                            unit_channels,
+                            out_channels,
+                            out_shape,
+                            use_prm,
+                            norm_cfg=norm_cfg)
+
+        self.predict_layer_c3 = PredictHeatmap(
+                            unit_channels,
+                            out_channels,
+                            out_shape,
+                            use_prm,
+                            norm_cfg=norm_cfg)
+
+        self.predict_layer_c4 = PredictHeatmap(
+                            unit_channels,
+                            out_channels,
+                            out_shape,
+                            use_prm,
+                            norm_cfg=norm_cfg)
+
+        self.predict_layer_c5 = PredictHeatmap(
                             unit_channels,
                             out_channels,
                             out_shape,
@@ -465,20 +486,25 @@ class RSNNeck(nn.Module):
         #         y = self.predict_layers[i * self.num_units + j](x[i][j])
         #         out.append(y)
 
-        feat_c2 = self.predict_layer(x[0][3])
+        pred_c2 = self.predict_layer_c2(x[0][3])
+        pred_c3 = self.predict_layer_c3(x[0][2])
+        pred_c4 = self.predict_layer_c4(x[0][1])
+        pred_c5 = self.predict_layer_c5(x[0][0])
+
         feat_c3 = x[0][2]
         feat_c4 = x[0][1]
         feat_c5 = x[0][0]
 
-        return [[feat_c2, feat_c3, feat_c4, feat_c5]]
+        return torch.stack([pred_c2, pred_c3, pred_c4, pred_c5]), [[feat_c3, feat_c4, feat_c5]]
 
 
     def init_weights(self):
         """Initialize model weights."""
-        for m in self.predict_layer.modules():
-            if isinstance(m, nn.Conv2d):
-                kaiming_init(m)
-            elif isinstance(m, nn.BatchNorm2d):
-                constant_init(m, 1)
-            elif isinstance(m, nn.Linear):
-                normal_init(m, std=0.01)
+        for predict_layer in [self.predict_layer_c2, self.predict_layer_c3, self.predict_layer_c4, self.predict_layer_c5]:
+            for m in predict_layer.modules():
+                if isinstance(m, nn.Conv2d):
+                    kaiming_init(m)
+                elif isinstance(m, nn.BatchNorm2d):
+                    constant_init(m, 1)
+                elif isinstance(m, nn.Linear):
+                    normal_init(m, std=0.01)

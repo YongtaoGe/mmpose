@@ -1045,7 +1045,7 @@ class HybridTransHead(nn.Module):
 
         if self.neck_type == 'RSNNeck':
             # feat_for_all_stages = feat_for_all_stages[0]
-            feat_c2 = feat_for_all_stages[0].pop(0)
+            outputs_hp_backbone, feat_for_all_stages = feat_for_all_stages
 
         if 'FPN' in self.neck_type:
             feat_for_all_stages = [feat_for_all_stages]
@@ -1102,13 +1102,20 @@ class HybridTransHead(nn.Module):
         outputs_coord = torch.stack(outputs_coords)
 
         if self.use_multi_stage_memory:
-            outputs_hp.insert(0, feat_c2)
-            outputs_hp = torch.stack(outputs_hp)
+            outputs_hp_enc = torch.stack(outputs_hp)
+            outputs = {
+                "coord": outputs_coord,
+                "hp": {
+                    'backbone': outputs_hp_backbone,
+                    "enc": outputs_hp_enc,
+                    }
+            }
 
-        outputs = {
-            "coord": outputs_coord,
-            "hp": outputs_hp
-        }
+        else:
+            outputs = {
+                "coord": outputs_coord,
+                "hp": outputs_hp
+            }
         return outputs
 
 
@@ -1144,15 +1151,30 @@ class HybridTransHead(nn.Module):
         losses = dict()
 
         if isinstance(self.loss_hp, nn.Sequential):
-            assert len(self.loss_hp) == output.size(0)
-            assert target.dim() == 5 and target_weight.dim() == 4
-            num_hp_layers = output.size(0)
-            for i in range(num_hp_layers):
-                target_i = target[:, i, :, :, :]
-                target_weight_i = target_weight[:, i, :, :]
-                # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
-                losses['mse_loss_{}'.format(i)] = self.loss_hp[i](output[i], target_i, target_weight_i)
+            if not isinstance(output, dict):
+                assert len(self.loss_hp) == output.size(0)
+                assert target.dim() == 5 and target_weight.dim() == 4
+                num_hp_layers = output.size(0)
+                for i in range(num_hp_layers):
+                    target_i = target[:, i, :, :, :]
+                    target_weight_i = target_weight[:, i, :, :]
+                    # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                    losses['mse_loss_{}'.format(i)] = self.loss_hp[i](output[i], target_i, target_weight_i)
+            else:
+                out_hp_backbone = output['backbone']
+                num_hp_layers = out_hp_backbone.size(0)
+                for i in range(num_hp_layers):
+                    target_i = target[:, i, :, :, :]
+                    target_weight_i = target_weight[:, i, :, :]
+                    # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                    losses['mse_loss_backbone_{}'.format(i)] = self.loss_hp[i](out_hp_backbone[i], target_i, target_weight_i)
 
+                out_hp_enc = output['enc']
+                for i in range(3):
+                    target_i = target[:, i+1, :, :, :]
+                    target_weight_i = target_weight[:, i+1, :, :]
+                    # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                    losses['mse_loss_enc_{}'.format(i)] = self.loss_hp[i+1](out_hp_enc[i], target_i, target_weight_i)
         else:
             # import pdb
             # pdb.set_trace()
@@ -1211,7 +1233,13 @@ class HybridTransHead(nn.Module):
                 Weights across different joint types.
         """
         coord_output = output["coord"]
-        hp_output = output["hp"]
+        if self.use_multi_stage_memory:
+            # hp_output = output["hp"]["backbone"]
+            hp_output_backbone = output["hp"]["backbone"]
+            hp_output_enc = output["hp"]["enc"]
+        else:
+            hp_output = output["hp"]
+
         accuracy = dict()
         if coord_output.dim() == 4:
             coord_output = coord_output[-1]
@@ -1228,11 +1256,19 @@ class HybridTransHead(nn.Module):
         if self.use_heatmap_loss and self.use_multi_stage_memory:
             assert hp_target.dim() == 5 and hp_target_weight.dim() == 4
             _, avg_acc, _ = pose_pck_accuracy(
-                hp_output[0].detach().cpu().numpy(),
+                hp_output_backbone[0].detach().cpu().numpy(),
                 hp_target[:, 0, ...].detach().cpu().numpy(),
                 hp_target_weight[:, 0,
                               ...].detach().cpu().numpy().squeeze(-1) > 0)
-            accuracy['hp_acc'] = float(avg_acc)
+            accuracy['hp_acc_backbone'] = float(avg_acc)
+
+            _, avg_acc, _ = pose_pck_accuracy(
+                hp_output_enc[0].detach().cpu().numpy(),
+                hp_target[:, 1, ...].detach().cpu().numpy(),
+                hp_target_weight[:, 1,
+                              ...].detach().cpu().numpy().squeeze(-1) > 0)
+            accuracy['hp_acc_enc'] = float(avg_acc)
+
         else:
             _, avg_acc, _ = pose_pck_accuracy(
                 hp_output.detach().cpu().numpy(),
