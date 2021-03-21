@@ -1,13 +1,15 @@
 from .alexnet import AlexNet
 from .cpm import CPM
 from .hourglass import HourglassNet
-from .hrnet import HRNet
+# from .hrnet import HRNet
+from .hrnet_mmdet import HRNet
 from .mobilenet_v2 import MobileNetV2
 from .mobilenet_v3 import MobileNetV3
 from .mspn import MSPN
 from .regnet import RegNet
 from .resnest import ResNeSt
 from .resnet import ResNet, ResNetV1d
+# from .resnet_mmdet import ResNet, ResNetV1d
 from .resnext import ResNeXt
 from .rsn import RSN
 from .scnet import SCNet

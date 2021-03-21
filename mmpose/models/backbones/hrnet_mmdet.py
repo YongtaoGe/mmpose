@@ -6,7 +6,7 @@ from torch.nn.modules.batchnorm import _BatchNorm
 
 from mmdet.utils import get_root_logger
 from ..builder import BACKBONES
-from .resnet import BasicBlock, Bottleneck
+from .resnet_mmdet import BasicBlock, Bottleneck
 
 
 class HRModule(nn.Module):
@@ -257,7 +257,7 @@ class HRNet(nn.Module):
                  in_channels=3,
                  conv_cfg=None,
                  norm_cfg=dict(type='BN'),
-                 norm_eval=True,
+                 norm_eval=False,
                  with_cp=False,
                  zero_init_residual=False):
         super(HRNet, self).__init__()
