@@ -20,8 +20,8 @@ class InputProj(nn.Module):
             self.input_proj.append(
                     nn.Sequential(
                     nn.Conv2d(in_channel, out_channel, kernel_size=1),
-                    # nn.GroupNorm(32, out_channel),
-                    nn.BatchNorm2d(out_channel),
+                    nn.GroupNorm(32, out_channel),
+                    # nn.BatchNorm2d(out_channel),
                 ))
 
     def init_weights(self):
