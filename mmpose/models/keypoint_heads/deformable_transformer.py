@@ -47,7 +47,7 @@ class MLP(nn.Module):
 class DeformableTransformer(nn.Module):
     def __init__(self, d_model=256, nhead=8, with_box_refine=True, hidden_dim=256,
                  num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=1024, dropout=0.1,
-                 activation="relu", return_intermediate_dec=False,
+                 activation="relu", return_intermediate_enc=False, return_intermediate_dec=False,
                  num_feature_levels=4, dec_n_points=4,  enc_n_points=4,
                  two_stage=False, two_stage_num_proposals=300,
                  decoder_layer_type="deformable", decoder_use_self_attn=True, decoder_share_query=False,
@@ -141,7 +141,7 @@ class DeformableTransformer(nn.Module):
         encoder_layer = DeformableTransformerEncoderLayer(d_model, dim_feedforward,
                                                           dropout, activation,
                                                           num_feature_levels, nhead, enc_n_points)
-        self.encoder = DeformableTransformerEncoder(encoder_layer, num_encoder_layers)
+        self.encoder = DeformableTransformerEncoder(encoder_layer, num_encoder_layers, return_intermediate_enc)
 
         if decoder_layer_type == "deformable":
             if decoder_use_self_attn:
@@ -326,9 +326,9 @@ class DeformableTransformer(nn.Module):
                         dtype=torch.float, device=src_flatten.device)
         # encoder
         # torch.Size([bs, 65, 256])
-        memory = self.encoder(src_flatten, spatial_shapes,
-                              level_start_index, valid_ratios,
-                              lvl_pos_embed_flatten)
+        memory, intermediate_memory = self.encoder(src_flatten, spatial_shapes,
+                                      level_start_index, valid_ratios,
+                                      lvl_pos_embed_flatten)
 
         # memory = src_flatten
         # prepare input for decoder
@@ -391,25 +391,28 @@ class DeformableTransformer(nn.Module):
             # pdb.set_trace()
             if self.use_multi_stage_memory:
                 if self.num_feature_levels == 3:
-                    out_heatmap_list = []
-                    h_c3, w_c3 = spatial_shapes[0][0], spatial_shapes[0][1]
-                    h_c4, w_c4 = spatial_shapes[1][0], spatial_shapes[1][1]
-                    h_c5, w_c5 = spatial_shapes[2][0], spatial_shapes[2][1]
+                    # out_hp_c3_list, out_hp_c4_list, out_hp_c5_list = [], [], []
+                    out_hp_list = []
+                    # import pdb
+                    # pdb.set_trace()
+                    for i in range(len(intermediate_memory)):
+                        memory =  intermediate_memory[i]
 
+                        h_c3, w_c3 = spatial_shapes[0][0], spatial_shapes[0][1]
+                        h_c4, w_c4 = spatial_shapes[1][0], spatial_shapes[1][1]
+                        h_c5, w_c5 = spatial_shapes[2][0], spatial_shapes[2][1]
 
-                    memory_c3 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h_c3, w_c3)
-                    memory_c4 = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h_c4, w_c4)
-                    memory_c5 = memory.permute(0, 2, 1)[:, :, level_start_index[2]:].contiguous().view(bs, c, h_c5, w_c5)
+                        memory_c3 = memory.permute(0, 2, 1)[:, :, :level_start_index[1]].contiguous().view(bs, c, h_c3, w_c3)
+                        memory_c4 = memory.permute(0, 2, 1)[:, :, level_start_index[1]:level_start_index[2]].contiguous().view(bs, c, h_c4, w_c4)
+                        memory_c5 = memory.permute(0, 2, 1)[:, :, level_start_index[2]:].contiguous().view(bs, c, h_c5, w_c5)
 
-                    out_hp_c3 = self.final_layer[0](memory_c3)
-                    out_hp_c4 = self.final_layer[1](memory_c4)
-                    out_hp_c5 = self.final_layer[2](memory_c5)
+                        out_hp_c3 = self.final_layer[0](memory_c3)
+                        out_hp_c4 = self.final_layer[1](memory_c4)
+                        out_hp_c5 = self.final_layer[2](memory_c5)
 
-                    out_heatmap_list.append(out_hp_c3)
-                    out_heatmap_list.append(out_hp_c4)
-                    out_heatmap_list.append(out_hp_c5)
+                        out_hp_list.append([out_hp_c3, out_hp_c4, out_hp_c5])
 
-                    return hs, init_reference_out, inter_references_out, out_heatmap_list
+                    return hs, init_reference_out, inter_references_out, out_hp_list
 
                 else:
                     raise NotImplementedError
@@ -422,7 +425,6 @@ class DeformableTransformer(nn.Module):
                 return hs, init_reference_out, inter_references_out, out_heatmap
 
         return hs, init_reference_out, inter_references_out
-
 
 
 
@@ -597,12 +599,13 @@ class DeformableTransformerEncoderLayer(nn.Module):
 
 
 class DeformableTransformerEncoder(nn.Module):
-    def __init__(self, encoder_layer, num_layers):
+    def __init__(self, encoder_layer, num_layers, return_intermediate=False):
         super().__init__()
         self.layers = _get_clones(encoder_layer, num_layers)
         self.num_layers = num_layers
         if self.num_layers == 0:
             self.dropout = nn.Dropout(0.1)
+        self.return_intermediate = return_intermediate
 
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
@@ -627,10 +630,17 @@ class DeformableTransformerEncoder(nn.Module):
 
         output = src
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
+
+        intermediate = []
         for _, layer in enumerate(self.layers):
             output = layer(output, pos, reference_points, spatial_shapes, level_start_index, padding_mask)
+            if self.return_intermediate:
+                intermediate.append(output)
 
-        return output
+        if self.return_intermediate:
+            return output, torch.stack(intermediate)
+
+        return output, None
 
 
 class DeformableTransformerDecoderLayer(nn.Module):

@@ -257,6 +257,7 @@ def _inference_single_pose_model(model,
             'flip_pairs': flip_pairs
         }
     }
+
     data = test_pipeline(data)
     data = collate([data], samples_per_gpu=1)
     if next(model.parameters()).is_cuda:
@@ -273,6 +274,7 @@ def _inference_single_pose_model(model,
             img_metas=data['img_metas'],
             return_loss=False,
             return_heatmap=return_heatmap)
+
 
     return result['preds'][0], result['output_heatmap']
 
@@ -324,7 +326,6 @@ def inference_top_down_pose_model(model,
 
     pose_results = []
     returned_outputs = []
-
     with OutputHook(model, outputs=outputs, as_tensor=False) as h:
         for person_result in person_results:
             if format == 'xyxy':
@@ -338,6 +339,7 @@ def inference_top_down_pose_model(model,
                 assert bbox_xywh.shape[1] == 5
                 if bbox_xywh[0, 4] < bbox_thr:
                     continue
+
 
             pose, heatmap = _inference_single_pose_model(
                 model,

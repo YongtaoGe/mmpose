@@ -455,3 +455,43 @@ class CoordAndHeatmapTopDown(TopDown):
             losses.update(keypoint_accuracy)
 
         return losses
+
+
+    def forward_test(self, img, img_metas, return_heatmap=False, **kwargs):
+        """Defines the computation performed at every call when testing."""
+        assert img.size(0) == len(img_metas)
+        batch_size, _, img_height, img_width = img.shape
+        if batch_size > 1:
+            assert 'bbox_id' in img_metas[0]
+
+        result = {}
+
+        features = self.backbone(img)
+        if self.with_neck:
+            features = self.neck(features)
+        if self.with_keypoint:
+            output_heatmap = self.keypoint_head.inference_model(
+                features, flip_pairs=None)
+
+        if self.test_cfg['flip_test']:
+            img_flipped = img.flip(3)
+            features_flipped = self.backbone(img_flipped)
+            if self.with_neck:
+                features_flipped = self.neck(features_flipped)
+            if self.with_keypoint:
+                output_flipped_heatmap = self.keypoint_head.inference_model(
+                    features_flipped, img_metas[0]['flip_pairs'])
+                output_heatmap = (output_heatmap +
+                                  output_flipped_heatmap) * 0.5
+
+        if self.with_keypoint:
+            keypoint_result = self.keypoint_head.decode_keypoints(
+                img_metas, output_heatmap, [img_width, img_height])
+            result.update(keypoint_result)
+
+            if not return_heatmap:
+                output_heatmap = None
+
+            result['output_heatmap'] = output_heatmap
+
+        return result

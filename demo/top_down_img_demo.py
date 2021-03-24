@@ -55,7 +55,6 @@ def main():
 
     # e.g. use ('backbone', ) to return backbone feature
     output_layer_names = None
-
     # process each image
     for i in range(len(img_keys)):
         # get bounding box annotations

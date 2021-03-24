@@ -1016,6 +1016,11 @@ class HybridTransHead(nn.Module):
         self.position_embedding = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
         self.query_embed = nn.Embedding(num_joints, hidden_dim * 2)
 
+        if neck_type == "RSNNeck":
+            return_intermediate_enc = True
+        else:
+            return_intermediate_enc = False
+
         # self.transformer = OneQueryDeformableTransformer(
         self.transformer = DeformableTransformer(
                     d_model=self.hidden_dim,
@@ -1026,6 +1031,7 @@ class HybridTransHead(nn.Module):
                     dim_feedforward=1024,
                     dropout=0.1,
                     activation="relu",
+                    return_intermediate_enc=return_intermediate_enc,
                     return_intermediate_dec=True,
                     num_feature_levels=self.num_levels,
                     dec_n_points=4,
@@ -1065,7 +1071,7 @@ class HybridTransHead(nn.Module):
                 if self.use_heatmap_loss:
                     # import pdb
                     # pdb.set_trace()
-                    hs, init_reference, inter_references, outputs_hp = \
+                    hs, init_reference, inter_references, outputs_hp_enc = \
                         self.transformer(feat_for_one_stage, pos_embeds_for_one_stage, query_embed)
                 else:
                     raise NotImplementedError
@@ -1102,7 +1108,7 @@ class HybridTransHead(nn.Module):
         outputs_coord = torch.stack(outputs_coords)
 
         if self.use_multi_stage_memory:
-            outputs_hp_enc = torch.stack(outputs_hp)
+            # outputs_hp_enc = torch.stack(outputs_hp)
             outputs = {
                 "coord": outputs_coord,
                 "hp": {
@@ -1114,7 +1120,7 @@ class HybridTransHead(nn.Module):
         else:
             outputs = {
                 "coord": outputs_coord,
-                "hp": outputs_hp
+                "hp": outputs_hp_enc
             }
         return outputs
 
@@ -1170,11 +1176,19 @@ class HybridTransHead(nn.Module):
                     losses['mse_loss_backbone_{}'.format(i)] = self.loss_hp[i](out_hp_backbone[i], target_i, target_weight_i)
 
                 out_hp_enc = output['enc']
-                for i in range(3):
-                    target_i = target[:, i+1, :, :, :]
-                    target_weight_i = target_weight[:, i+1, :, :]
-                    # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
-                    losses['mse_loss_enc_{}'.format(i)] = self.loss_hp[i+1](out_hp_enc[i], target_i, target_weight_i)
+                for lvl in range(len(out_hp_enc)):
+                    if lvl==2 or lvl==5:
+                    # if lvl == 5:
+                        for i in range(3):
+                            target_i = target[:, i+1, :, :, :]
+                            target_weight_i = target_weight[:, i+1, :, :]
+                        # losses['reg_loss'] += self.loss(output[i], target, target_weight).sum()
+                            if lvl == 2:
+                                loss_weight = 0.1
+                            elif lvl == 5:
+                                loss_weight = 1.0
+
+                            losses['mse_loss_enc_layer{}_c{}'.format(lvl, i+3)] = loss_weight * self.loss_hp[i+1](out_hp_enc[lvl][i], target_i, target_weight_i)
         else:
             # import pdb
             # pdb.set_trace()
@@ -1263,7 +1277,7 @@ class HybridTransHead(nn.Module):
             accuracy['hp_acc_backbone'] = float(avg_acc)
 
             _, avg_acc, _ = pose_pck_accuracy(
-                hp_output_enc[0].detach().cpu().numpy(),
+                hp_output_enc[-1][0].detach().cpu().numpy(),
                 hp_target[:, 1, ...].detach().cpu().numpy(),
                 hp_target_weight[:, 1,
                               ...].detach().cpu().numpy().squeeze(-1) > 0)

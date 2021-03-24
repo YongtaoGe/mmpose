@@ -221,7 +221,25 @@ val_pipeline = [
         ]),
 ]
 
-test_pipeline = val_pipeline
+
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='TopDownAffine', use_udp=False),
+    dict(type='ToTensor'),
+    dict(
+        type='NormalizeTensor',
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]),
+    dict(
+        type='Collect',
+        keys=[
+            'img',
+        ],
+        meta_keys=[
+            'image_file', 'center', 'scale', 'rotation', 'bbox_score',
+            'flip_pairs'
+        ]),
+]
 
 data_root = 'data/coco'
 data = dict(

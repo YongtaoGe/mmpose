@@ -33,7 +33,6 @@ class InputProj(nn.Module):
         if self.backbone_type == 'HRNet':
             inputs = inputs[1:]
             # inputs.pop(0)
-
         assert len(inputs) == len(self.input_proj)
         out_list = []
         for i, feat in enumerate(inputs):
