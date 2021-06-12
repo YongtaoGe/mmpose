@@ -316,8 +316,9 @@ def load_checkpoint(model,
     else:
         state_dict = checkpoint
     # strip prefix of state_dict
+
     if list(state_dict.keys())[0].startswith('module.'):
-        state_dict = {k[7:]: v for k, v in state_dict.items()}
+        state_dict = {k[7:]+'backbone.': v for k, v in state_dict.items()}
 
     # reshape absolute position embedding
     if state_dict.get('absolute_pos_embed') is not None:
@@ -331,12 +332,12 @@ def load_checkpoint(model,
 
     # interpolate position bias table if needed
     relative_position_bias_table_keys = [k for k in state_dict.keys() if "relative_position_bias_table" in k]
-
-    import pdb
-    pdb.set_trace()
+    # aa = [k for k in model.state_dict.keys() if "relative_position_bias_table" in k]
+    # import pdb
+    # pdb.set_trace()
     for table_key in relative_position_bias_table_keys:
         table_pretrained = state_dict[table_key]
-        table_current = model.state_dict()[table_key]
+        table_current = model.state_dict()['module.' + table_key]
         L1, nH1 = table_pretrained.size()
         L2, nH2 = table_current.size()
         if nH1 != nH2:
