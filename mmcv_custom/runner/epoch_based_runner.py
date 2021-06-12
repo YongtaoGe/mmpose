@@ -9,7 +9,7 @@ from torch.optim import Optimizer
 import mmcv
 from mmcv.runner import RUNNERS, EpochBasedRunner
 from .checkpoint import save_checkpoint
-
+from mmcv_custom.checkpoint import load_checkpoint
 try:
     import apex
 except:
@@ -102,3 +102,9 @@ class EpochBasedRunnerAmp(EpochBasedRunner):
             self.logger.info('load amp state dict')
 
         self.logger.info('resumed epoch %d, iter %d', self.epoch, self.iter)
+
+
+    def load_checkpoint(self, filename, map_location='cpu', strict=False):
+        self.logger.info('load checkpoint from %s', filename)
+        return load_checkpoint(self.model, filename, map_location, strict,
+                               self.logger)
