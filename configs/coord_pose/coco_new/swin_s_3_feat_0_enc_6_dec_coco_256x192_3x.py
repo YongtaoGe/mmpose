@@ -86,7 +86,7 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained=None,
+    pretrained="/home/zhengyi/pretrained/swin_small_patch4_window7_224.pth",
     backbone=dict(
             type='SwinTransformer',
             embed_dim=96,
@@ -102,7 +102,7 @@ model = dict(
             ape=False,
             patch_norm=True,
             out_indices=(1, 2, 3),
-            use_checkpoint=False),
+            use_checkpoint=True),
 
     neck=dict(type='InputProj', in_channels=(192, 384, 768), out_channel=256),
 
