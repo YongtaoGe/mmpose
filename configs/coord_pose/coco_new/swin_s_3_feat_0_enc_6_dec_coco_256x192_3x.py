@@ -1,5 +1,5 @@
 log_level = 'INFO'
-load_from = None
+load_from = "/home/zhengyi/pretrained/swin_small_patch4_window7_224.pth"
 resume_from = None
 dist_params = dict(backend='nccl')
 workflow = [('train', 1)]
@@ -86,7 +86,7 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained="/home/zhengyi/pretrained/swin_small_patch4_window7_224.pth",
+    pretrained=None,
     backbone=dict(
             type='SwinTransformer',
             embed_dim=96,
