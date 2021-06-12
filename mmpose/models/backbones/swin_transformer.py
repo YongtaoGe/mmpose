@@ -18,7 +18,7 @@ import warnings
 # from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
 from mmcv_custom import load_checkpoint
-from mmdet.utils import get_root_logger
+from mmpose.utils import get_root_logger
 from ..builder import BACKBONES
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
