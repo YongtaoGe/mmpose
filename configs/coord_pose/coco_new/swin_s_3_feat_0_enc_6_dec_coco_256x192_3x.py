@@ -9,14 +9,15 @@ runner = dict(type='EpochBasedRunnerAmp')
 
 optimizer = dict(
     type='AdamW',
-    lr=4e-3,
-    weight_decay=1e-5,
-    # type='Adam',
-    # lr=4e-,
-    # weight_decay=1e-4,
+    lr=4e-4,
+    betas=(0.9, 0.999),
+    weight_decay=0.05,
     paramwise_cfg = dict(
         custom_keys={
-            'transformer': dict(lr_mult=0.1, decay_mult=1.0),
+            # 'transformer': dict(lr_mult=0.1, decay_mult=1.0),
+            'absolute_pos_embed': dict(decay_mult=0.),
+            'relative_position_bias_table': dict(decay_mult=0.),
+            'norm': dict(decay_mult=0.)
             # 'query_embed': dict(lr_mult=0.5, decay_mult=1.0),
         },
         # bypass_duplicate=True

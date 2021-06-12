@@ -331,6 +331,9 @@ def load_checkpoint(model,
 
     # interpolate position bias table if needed
     relative_position_bias_table_keys = [k for k in state_dict.keys() if "relative_position_bias_table" in k]
+
+    import pdb
+    pdb.set_trace()
     for table_key in relative_position_bias_table_keys:
         table_pretrained = state_dict[table_key]
         table_current = model.state_dict()[table_key]
