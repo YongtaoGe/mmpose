@@ -5,6 +5,7 @@ dist_params = dict(backend='nccl')
 workflow = [('train', 1)]
 checkpoint_config = dict(interval=10)
 evaluation = dict(interval=50, metric='mAP', key_indicator='AP')
+runner = dict(type='EpochBasedRunnerAmp')
 
 optimizer = dict(
     type='AdamW',

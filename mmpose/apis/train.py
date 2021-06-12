@@ -1,6 +1,9 @@
 import torch
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
-from mmcv.runner import DistSamplerSeedHook, EpochBasedRunner, OptimizerHook
+from mmcv.runner import (HOOKS, DistSamplerSeedHook, EpochBasedRunner,
+                         Fp16OptimizerHook, OptimizerHook, build_optimizer,
+                         build_runner)
+from mmcv_custom.runner import EpochBasedRunnerAmp
 
 from mmpose.core import (DistEvalHook, EvalHook, Fp16OptimizerHook, ParamwiseOptimizerHook,
                          build_optimizers)
@@ -135,14 +138,16 @@ def train_model(model,
     # # len(aa)==171
     # aa = [n for n, p in model.named_parameters() if 'transformer' in n]
     #######################
+    # build runner
+    runner = build_runner(
+        cfg.runner,
+        default_args=dict(
+            model=model,
+            optimizer=optimizer,
+            work_dir=cfg.work_dir,
+            logger=logger,
+            meta=meta))
 
-
-    runner = EpochBasedRunner(
-        model,
-        optimizer=optimizer,
-        work_dir=cfg.work_dir,
-        logger=logger,
-        meta=meta)
     # an ugly workaround to make .log and .log.json filenames the same
     runner.timestamp = timestamp
 
@@ -193,5 +198,7 @@ def train_model(model,
     if cfg.resume_from:
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
+        import pdb
+        pdb.set_trace()
         runner.load_checkpoint(cfg.load_from)
     runner.run(data_loaders, cfg.workflow, cfg.total_epochs)
