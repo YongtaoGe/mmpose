@@ -206,6 +206,8 @@ class BaseCocoStyleDataset(BaseDataset):
         instance_list = []
         image_list = []
 
+        # import pdb
+        # pdb.set_trace()
         for img_id in self.coco.getImgIds():
             img = self.coco.loadImgs(img_id)[0]
             img.update({

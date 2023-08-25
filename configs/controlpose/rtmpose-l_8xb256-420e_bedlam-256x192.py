@@ -1,11 +1,21 @@
-_base_ = ['../../../_base_/default_runtime.py']
+_base_ = ['../_base_/default_runtime.py']
 
 # runtime
 max_epochs = 420
 stage2_num_epochs = 30
 base_lr = 4e-3
 
-train_cfg = dict(max_epochs=max_epochs, val_interval=1)
+# hooks
+default_hooks = dict(
+    timer=dict(type='IterTimerHook'),
+    logger=dict(type='LoggerHook', interval=10),
+    param_scheduler=dict(type='ParamSchedulerHook'),
+    checkpoint=dict(type='CheckpointHook', interval=10),
+    sampler_seed=dict(type='DistSamplerSeedHook'),
+    visualization=dict(type='PoseVisualizationHook', enable=False),
+)
+
+train_cfg = dict(max_epochs=max_epochs, val_interval=10)
 randomness = dict(seed=21)
 
 # optimizer
@@ -116,14 +126,14 @@ train_pipeline = [
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
     dict(
-        type='RandomBBoxTransform', scale_factor=[0.6, 1.4], rotate_factor=80),
+        type='RandomBBoxTransform', scale_factor=[0.4, 1.4], rotate_factor=80),
     dict(type='TopdownAffine', input_size=codec['input_size']),
     dict(type='mmdet.YOLOXHSVRandomAug'),
     dict(
         type='Albumentation',
         transforms=[
-            dict(type='Blur', p=0.1),
-            dict(type='MedianBlur', p=0.1),
+            dict(type='Blur', p=0.2),
+            dict(type='MedianBlur', p=0.3),
             dict(
                 type='CoarseDropout',
                 max_holes=1,
@@ -178,15 +188,18 @@ train_pipeline_stage2 = [
 # data loaders
 train_dataloader = dict(
     batch_size=256,
-    num_workers=10,
-    persistent_workers=True,
+    # num_workers=10,
+    num_workers=0,
+    # persistent_workers=True,
+    persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
         type=dataset_type,
         data_root=data_root,
         data_mode=data_mode,
-        ann_file='annotations/person_keypoints_train2017.json',
-        data_prefix=dict(img='train2017/'),
+        # ann_file='annotations/person_keypoints_train2017.json',
+        ann_file='annotations/bedlam_train.json',
+        data_prefix=dict(img='bedlam_images'),
         pipeline=train_pipeline,
     ))
 val_dataloader = dict(
@@ -200,8 +213,8 @@ val_dataloader = dict(
         data_root=data_root,
         data_mode=data_mode,
         ann_file='annotations/person_keypoints_val2017.json',
-        # bbox_file=f'{data_root}person_detection_results/'
-        # 'COCO_val2017_detections_AP_H_56_person.json',
+        bbox_file=f'{data_root}person_detection_results/'
+        'COCO_val2017_detections_AP_H_56_person.json',
         data_prefix=dict(img='val2017/'),
         test_mode=True,
         pipeline=val_pipeline,
