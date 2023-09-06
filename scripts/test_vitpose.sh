@@ -1,4 +1,3 @@
-# python tools/test.py \
 CONFIG=configs/controlpose/td-hm_ViTPose-huge_8xb64-210e_coco-256x192.py
 CHECKPOINT=data/pretrain/td-hm_ViTPose-huge_8xb64-210e_coco-256x192-e32adcd4_20230314.pth
 GPUS=4
