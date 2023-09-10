@@ -78,8 +78,7 @@ model = dict(
         init_cfg=dict(
             type='Pretrained',
             prefix='backbone.',
-            checkpoint='https://download.openmmlab.com/mmpose/v1/projects/'
-            'rtmposev1/cspnext-l_udp-aic-coco_210e-256x192-273b7631_20230130.pth'  # noqa
+            checkpoint='data/pretrain/cspnext-l_udp-aic-coco_210e-256x192-273b7631_20230130.pth'  # noqa
         )),
     head=dict(
         type='RTMCCHead',
@@ -110,7 +109,7 @@ model = dict(
 # dataset_type = 'ControlPoseDataset'
 dataset_type = 'CocoDataset'
 data_mode = 'topdown'
-data_root = 'data/'
+data_root = 'data/controlpose/'
 
 backend_args = dict(backend='local')
 # backend_args = dict(
@@ -190,7 +189,7 @@ train_pipeline_stage2 = [
 train_dataloader = dict(
     batch_size=256,
     # num_workers=10,
-    num_workers=0,
+    num_workers=4,
     # persistent_workers=True,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -200,7 +199,7 @@ train_dataloader = dict(
         data_mode=data_mode,
         # ann_file='annotations/person_keypoints_train2017.json',
         # ann_file='annotations/controlpose_train.json',
-        ann_file='training_labels/coco_filter.json'
+        ann_file='annotations/coco_filter.json',
         data_prefix=dict(img='images'),
         pipeline=train_pipeline,
     ))
