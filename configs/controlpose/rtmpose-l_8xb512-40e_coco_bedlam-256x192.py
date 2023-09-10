@@ -78,8 +78,7 @@ model = dict(
         init_cfg=dict(
             type='Pretrained',
             prefix='backbone.',
-            checkpoint='https://download.openmmlab.com/mmpose/v1/projects/'
-            'rtmposev1/cspnext-l_udp-aic-coco_210e-256x192-273b7631_20230130.pth'  # noqa
+            checkpoint='data/pretrain/cspnext-l_udp-aic-coco_210e-256x192-273b7631_20230130.pth'  # noqa
         )),
     head=dict(
         type='RTMCCHead',
@@ -109,7 +108,7 @@ model = dict(
 # base dataset settings
 dataset_type = 'CocoDataset'
 data_mode = 'topdown'
-data_root = 'data/bedlam/'
+data_root = 'data/'
 
 backend_args = dict(backend='local')
 # backend_args = dict(
@@ -185,6 +184,31 @@ train_pipeline_stage2 = [
     dict(type='PackPoseInputs')
 ]
 
+# train datasets
+dataset_coco = dict(
+    type='RepeatDataset',
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_mode=data_mode,
+        ann_file='coco/annotations/person_keypoints_train2017.json',
+        data_prefix=dict(img='coco/train2017/'),
+        pipeline=[],
+    ),
+    times=3)
+
+dataset_bedlam = dict(
+    type='RepeatDataset',
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_mode=data_mode,
+        ann_file='bedlam/training_labels/bedlam_train_refine.json',
+        data_prefix=dict(img='bedlam/training_images/'),
+        pipeline=[],
+    ),
+    times=1)
+
 # data loaders
 train_dataloader = dict(
     batch_size=512,
@@ -193,17 +217,25 @@ train_dataloader = dict(
     # persistent_workers=True,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=True),
+    # dataset=dict(
+    #     type=dataset_type,
+    #     data_root=data_root,
+    #     data_mode=data_mode,
+    #     # ann_file='annotations/person_keypoints_train2017.json',
+    #     ann_file='training_labels/bedlam_train_refine.json',
+    #     data_prefix=dict(img='training_images'),
+    #     pipeline=train_pipeline,
+    # )
     dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
-        data_mode=data_mode,
-        # ann_file='annotations/person_keypoints_train2017.json',
-        ann_file='training_labels/bedlam_train_refine.json',
-        data_prefix=dict(img='training_images'),
+        type='CombinedDataset',
+        metainfo=dict(from_file='configs/_base_/datasets/coco.py'),
+        datasets=[dataset_coco, dataset_bedlam],
         pipeline=train_pipeline,
-    ))
+        test_mode=False,
+    ))   
+     
 val_dataloader = dict(
-    batch_size=256,
+    batch_size=512,
     num_workers=10,
     persistent_workers=True,
     drop_last=False,
@@ -212,8 +244,8 @@ val_dataloader = dict(
         type=dataset_type,
         data_root=data_root,
         data_mode=data_mode,
-        ann_file='annotations/person_keypoints_val2017.json',
-        bbox_file=f'{data_root}person_detection_results/'
+        ann_file='coco/annotations/person_keypoints_val2017.json',
+        bbox_file=f'{data_root}coco/person_detection_results/'
         'COCO_val2017_detections_AP_H_56_person.json',
         data_prefix=dict(img='val2017/'),
         test_mode=True,
@@ -241,5 +273,5 @@ custom_hooks = [
 # evaluators
 val_evaluator = dict(
     type='CocoMetric',
-    ann_file=data_root + 'annotations/person_keypoints_val2017.json')
+    ann_file=data_root + 'coco/annotations/person_keypoints_val2017.json')
 test_evaluator = val_evaluator
