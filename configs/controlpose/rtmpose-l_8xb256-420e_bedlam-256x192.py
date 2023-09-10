@@ -1,7 +1,7 @@
 _base_ = ['../_base_/default_runtime.py']
 
 # runtime
-max_epochs = 420
+max_epochs = 40
 stage2_num_epochs = 30
 base_lr = 4e-3
 
@@ -187,9 +187,9 @@ train_pipeline_stage2 = [
 
 # data loaders
 train_dataloader = dict(
-    batch_size=256,
-    # num_workers=10,
-    num_workers=0,
+    batch_size=512,
+    num_workers=8,
+    # num_workers=2,
     # persistent_workers=True,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -198,8 +198,8 @@ train_dataloader = dict(
         data_root=data_root,
         data_mode=data_mode,
         # ann_file='annotations/person_keypoints_train2017.json',
-        ann_file='annotations/bedlam_train.json',
-        data_prefix=dict(img='bedlam_images'),
+        ann_file='training_labels/bedlam_train_refine.json',
+        data_prefix=dict(img='training_images'),
         pipeline=train_pipeline,
     ))
 val_dataloader = dict(

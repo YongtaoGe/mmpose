@@ -107,9 +107,10 @@ model = dict(
     test_cfg=dict(flip_test=True))
 
 # base dataset settings
-dataset_type = 'ControlPoseDataset'
+# dataset_type = 'ControlPoseDataset'
+dataset_type = 'CocoDataset'
 data_mode = 'topdown'
-data_root = 'data/coco/'
+data_root = 'data/'
 
 backend_args = dict(backend='local')
 # backend_args = dict(
@@ -198,8 +199,9 @@ train_dataloader = dict(
         data_root=data_root,
         data_mode=data_mode,
         # ann_file='annotations/person_keypoints_train2017.json',
-        ann_file='annotations/controlpose_train.json',
-        data_prefix=dict(img='controlpose_images'),
+        # ann_file='annotations/controlpose_train.json',
+        ann_file='training_labels/coco_filter.json'
+        data_prefix=dict(img='images'),
         pipeline=train_pipeline,
     ))
 val_dataloader = dict(
