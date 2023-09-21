@@ -10,12 +10,12 @@ default_hooks = dict(
     timer=dict(type='IterTimerHook'),
     logger=dict(type='LoggerHook', interval=10),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=10),
+    checkpoint=dict(type='CheckpointHook', interval=5),
     sampler_seed=dict(type='DistSamplerSeedHook'),
     visualization=dict(type='PoseVisualizationHook', enable=False),
 )
 
-train_cfg = dict(max_epochs=max_epochs, val_interval=10)
+train_cfg = dict(max_epochs=max_epochs, val_interval=5)
 randomness = dict(seed=21)
 
 # optimizer
@@ -109,7 +109,8 @@ model = dict(
 # dataset_type = 'ControlPoseDataset'
 dataset_type = 'CocoDataset'
 data_mode = 'topdown'
-data_root = 'data/controlpose/'
+# data_root = 'data/controlpose/'
+data_root = 'data/'
 
 backend_args = dict(backend='local')
 # backend_args = dict(
@@ -199,8 +200,10 @@ train_dataloader = dict(
         data_mode=data_mode,
         # ann_file='annotations/person_keypoints_train2017.json',
         # ann_file='annotations/controlpose_train.json',
-        ann_file='annotations/coco_filter.json',
-        data_prefix=dict(img='images'),
+        # ann_file='controlpose/annotations/coco_merge_all.json',
+        # ann_file='controlpose/annotations/controlnet_org.json',
+        ann_file='controlpose/annotations/controlpose_pseudo.json',
+        data_prefix=dict(img='controlpose/images'),
         pipeline=train_pipeline,
     ))
 val_dataloader = dict(
@@ -213,8 +216,8 @@ val_dataloader = dict(
         type=dataset_type,
         data_root=data_root,
         data_mode=data_mode,
-        ann_file='annotations/person_keypoints_val2017.json',
-        bbox_file=f'{data_root}person_detection_results/'
+        ann_file='coco/annotations/person_keypoints_val2017.json',
+        bbox_file=f'{data_root}coco/person_detection_results/'
         'COCO_val2017_detections_AP_H_56_person.json',
         data_prefix=dict(img='val2017/'),
         test_mode=True,
@@ -242,5 +245,5 @@ custom_hooks = [
 # evaluators
 val_evaluator = dict(
     type='CocoMetric',
-    ann_file=data_root + 'annotations/person_keypoints_val2017.json')
+    ann_file=data_root + 'coco/annotations/person_keypoints_val2017.json')
 test_evaluator = val_evaluator

@@ -11,6 +11,8 @@ from mmengine import Config, DictAction
 from mmengine.registry import build_from_cfg, init_default_scope
 from mmengine.structures import InstanceData
 
+import sys
+sys.path.insert(0, os.getcwd())
 from mmpose.registry import DATASETS, VISUALIZERS
 from mmpose.structures import PoseDataSample
 

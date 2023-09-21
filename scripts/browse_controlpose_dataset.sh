@@ -2,7 +2,7 @@ PHASE='train'
 # MODE='transformed'
 MODE='original'
 SHOW_INTERVAL=10
-OUTPUT_DIR='./vis_org'
+OUTPUT_DIR='./vis_controlpose_pseudo'
 CONFIG=configs/controlpose/rtmpose-l_8xb256-420e_controlpose-256x192.py
 
 python tools/misc/browse_dataset.py \
