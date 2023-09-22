@@ -1,19 +1,9 @@
 _base_ = ['../_base_/default_runtime.py']
 
 # runtime
-max_epochs = 40
-stage2_num_epochs = 8
-base_lr = 1e-3
-
-# hooks
-default_hooks = dict(
-    timer=dict(type='IterTimerHook'),
-    logger=dict(type='LoggerHook', interval=10),
-    param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=5),
-    sampler_seed=dict(type='DistSamplerSeedHook'),
-    visualization=dict(type='PoseVisualizationHook', enable=False),
-)
+max_epochs = 20
+stage2_num_epochs = 5
+base_lr = 4e-3
 
 train_cfg = dict(max_epochs=max_epochs, val_interval=1)
 randomness = dict(seed=21)
@@ -24,6 +14,16 @@ optim_wrapper = dict(
     optimizer=dict(type='AdamW', lr=base_lr, weight_decay=0.05),
     paramwise_cfg=dict(
         norm_decay_mult=0, bias_decay_mult=0, bypass_duplicate=True))
+
+# hooks
+default_hooks = dict(
+    timer=dict(type='IterTimerHook'),
+    logger=dict(type='LoggerHook', interval=10),
+    param_scheduler=dict(type='ParamSchedulerHook'),
+    checkpoint=dict(type='CheckpointHook', interval=10),
+    sampler_seed=dict(type='DistSamplerSeedHook'),
+    visualization=dict(type='PoseVisualizationHook', enable=False),
+)
 
 # learning rate
 param_scheduler = [
@@ -106,11 +106,9 @@ model = dict(
     test_cfg=dict(flip_test=True))
 
 # base dataset settings
-# dataset_type = 'ControlPoseDataset'
 dataset_type = 'CocoDataset'
 data_mode = 'topdown'
-# data_root = 'data/controlpose/'
-data_root = 'data/'
+data_root = 'data/coco/'
 
 backend_args = dict(backend='local')
 # backend_args = dict(
@@ -127,21 +125,19 @@ train_pipeline = [
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
     dict(
-        type='RandomBBoxTransform', scale_factor=[0.15, 1.8], rotate_factor=80),
+        type='RandomBBoxTransform', scale_factor=[0.6, 1.4], rotate_factor=80),
     dict(type='TopdownAffine', input_size=codec['input_size']),
     dict(type='mmdet.YOLOXHSVRandomAug'),
     dict(
         type='Albumentation',
         transforms=[
-            # dict(type='Blur', p=0.2),
-            # dict(type='MedianBlur', p=0.3),
-            dict(type='Blur', p=0.3),
-            dict(type='MedianBlur', p=0.45),
+            dict(type='Blur', p=0.1),
+            dict(type='MedianBlur', p=0.1),
             dict(
                 type='CoarseDropout',
-                max_holes=7,
-                max_height=0.5,
-                max_width=0.5,
+                max_holes=1,
+                max_height=0.4,
+                max_width=0.4,
                 min_holes=1,
                 min_height=0.2,
                 min_width=0.2,
@@ -176,7 +172,7 @@ train_pipeline_stage2 = [
             dict(type='MedianBlur', p=0.1),
             dict(
                 type='CoarseDropout',
-                max_holes=3,
+                max_holes=1,
                 max_height=0.4,
                 max_width=0.4,
                 min_holes=1,
@@ -188,76 +184,20 @@ train_pipeline_stage2 = [
     dict(type='PackPoseInputs')
 ]
 
-
-# train datasets
-dataset_coco_10_percent = dict(
-    type='RepeatDataset',
-    dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
-        data_mode=data_mode,
-        ann_file='coco/annotations/person_keypoints_train2017_0.1.json',
-        data_prefix=dict(img='coco/train2017/'),
-        pipeline=[],
-    ),
-    times=3)
-
-dataset_controlpose = dict(
-    type='RepeatDataset',
-    dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
-        data_mode=data_mode,
-        ann_file='controlpose/annotations/controlpose_pseudo.json',
-        data_prefix=dict(img='controlpose/images/'),
-        pipeline=[],
-    ),
-    times=1)
-
-dataset_bedlam = dict(
-    type='RepeatDataset',
-    dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
-        data_mode=data_mode,
-        ann_file='bedlam/training_labels/bedlam_train_refine.json',
-        data_prefix=dict(img='bedlam/training_images/'),
-        pipeline=[],
-    ),
-    times=1)
-    
 # data loaders
 train_dataloader = dict(
-    # batch_size=256,
-    batch_size=512,
-    # num_workers=10,
-    num_workers=6,
-    # persistent_workers=True,
-    persistent_workers=False,
+    batch_size=128,
+    num_workers=4,
+    persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
-    # dataset=dict(
-    #     type=dataset_type,
-    #     data_root=data_root,
-    #     data_mode=data_mode,
-    #     # ann_file='annotations/person_keypoints_train2017.json',
-    #     # ann_file='annotations/controlpose_train.json',
-    #     # ann_file='controlpose/annotations/coco_merge_all.json',
-    #     # ann_file='controlpose/annotations/controlnet_org.json',
-    #     ann_file='controlpose/annotations/controlpose_pseudo.json',
-    #     data_prefix=dict(img='controlpose/images'),
-    #     pipeline=train_pipeline,
-    # )
-    
     dataset=dict(
-        type='CombinedDataset',
-        metainfo=dict(from_file='configs/_base_/datasets/coco.py'),
-        # datasets=[dataset_coco, dataset_bedlam],
-        datasets=[dataset_controlpose, dataset_coco_10_percent],
+        type=dataset_type,
+        data_root=data_root,
+        data_mode=data_mode,
+        ann_file='annotations/person_keypoints_train2017.json',
+        data_prefix=dict(img='train2017/'),
         pipeline=train_pipeline,
-        test_mode=False,
-    )
-    
-    )
+    ))
 val_dataloader = dict(
     batch_size=256,
     num_workers=10,
@@ -268,10 +208,10 @@ val_dataloader = dict(
         type=dataset_type,
         data_root=data_root,
         data_mode=data_mode,
-        ann_file='coco/annotations/person_keypoints_val2017.json',
-        bbox_file=f'{data_root}coco/person_detection_results/'
-        'COCO_val2017_detections_AP_H_56_person.json',
-        data_prefix=dict(img='coco/val2017/'),
+        ann_file='annotations/person_keypoints_val2017.json',
+        # bbox_file=f'{data_root}person_detection_results/'
+        # 'COCO_val2017_detections_AP_H_56_person.json',
+        data_prefix=dict(img='val2017/'),
         test_mode=True,
         pipeline=val_pipeline,
     ))
@@ -297,5 +237,5 @@ custom_hooks = [
 # evaluators
 val_evaluator = dict(
     type='CocoMetric',
-    ann_file=data_root + 'coco/annotations/person_keypoints_val2017.json')
+    ann_file=data_root + 'annotations/person_keypoints_val2017.json')
 test_evaluator = val_evaluator

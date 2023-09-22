@@ -1,8 +1,8 @@
 _base_ = ['../_base_/default_runtime.py']
 
 # runtime
-max_epochs = 420
-stage2_num_epochs = 30
+max_epochs = 20
+stage2_num_epochs = 5
 base_lr = 4e-3
 
 train_cfg = dict(max_epochs=max_epochs, val_interval=1)
@@ -120,7 +120,7 @@ backend_args = dict(backend='local')
 
 # pipelines
 train_pipeline = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
@@ -147,14 +147,14 @@ train_pipeline = [
     dict(type='PackPoseInputs')
 ]
 val_pipeline = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='TopdownAffine', input_size=codec['input_size']),
     dict(type='PackPoseInputs')
 ]
 
 train_pipeline_stage2 = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),

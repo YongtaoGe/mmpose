@@ -1,5 +1,5 @@
 # export NCCL_P2P_DISABLE=1
-t ./tools/dist_train.sh \
+./tools/dist_train.sh \
 configs/controlpose/rtmpose-l_8xb256-420e_coco-256x192.py \
 2 \
 

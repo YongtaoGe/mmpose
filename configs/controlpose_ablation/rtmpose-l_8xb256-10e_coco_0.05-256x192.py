@@ -1,9 +1,19 @@
 _base_ = ['../_base_/default_runtime.py']
 
 # runtime
-max_epochs = 40
-stage2_num_epochs = 30
+max_epochs = 20
+stage2_num_epochs = 5
 base_lr = 4e-3
+
+train_cfg = dict(max_epochs=max_epochs, val_interval=1)
+randomness = dict(seed=21)
+
+# optimizer
+optim_wrapper = dict(
+    type='OptimWrapper',
+    optimizer=dict(type='AdamW', lr=base_lr, weight_decay=0.05),
+    paramwise_cfg=dict(
+        norm_decay_mult=0, bias_decay_mult=0, bypass_duplicate=True))
 
 # hooks
 default_hooks = dict(
@@ -14,16 +24,6 @@ default_hooks = dict(
     sampler_seed=dict(type='DistSamplerSeedHook'),
     visualization=dict(type='PoseVisualizationHook', enable=False),
 )
-
-train_cfg = dict(max_epochs=max_epochs, val_interval=10)
-randomness = dict(seed=21)
-
-# optimizer
-optim_wrapper = dict(
-    type='OptimWrapper',
-    optimizer=dict(type='AdamW', lr=base_lr, weight_decay=0.05),
-    paramwise_cfg=dict(
-        norm_decay_mult=0, bias_decay_mult=0, bypass_duplicate=True))
 
 # learning rate
 param_scheduler = [
@@ -108,7 +108,7 @@ model = dict(
 # base dataset settings
 dataset_type = 'CocoDataset'
 data_mode = 'topdown'
-data_root = 'data/bedlam/'
+data_root = 'data/coco/'
 
 backend_args = dict(backend='local')
 # backend_args = dict(
@@ -120,19 +120,19 @@ backend_args = dict(backend='local')
 
 # pipelines
 train_pipeline = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
     dict(
-        type='RandomBBoxTransform', scale_factor=[0.4, 1.4], rotate_factor=80),
+        type='RandomBBoxTransform', scale_factor=[0.6, 1.4], rotate_factor=80),
     dict(type='TopdownAffine', input_size=codec['input_size']),
     dict(type='mmdet.YOLOXHSVRandomAug'),
     dict(
         type='Albumentation',
         transforms=[
-            dict(type='Blur', p=0.2),
-            dict(type='MedianBlur', p=0.3),
+            dict(type='Blur', p=0.1),
+            dict(type='MedianBlur', p=0.1),
             dict(
                 type='CoarseDropout',
                 max_holes=1,
@@ -147,14 +147,14 @@ train_pipeline = [
     dict(type='PackPoseInputs')
 ]
 val_pipeline = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='TopdownAffine', input_size=codec['input_size']),
     dict(type='PackPoseInputs')
 ]
 
 train_pipeline_stage2 = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
@@ -186,19 +186,16 @@ train_pipeline_stage2 = [
 
 # data loaders
 train_dataloader = dict(
-    batch_size=512,
-    num_workers=8,
-    # num_workers=2,
-    # persistent_workers=True,
-    persistent_workers=False,
+    batch_size=128,
+    num_workers=4,
+    persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
         type=dataset_type,
         data_root=data_root,
         data_mode=data_mode,
-        # ann_file='annotations/person_keypoints_train2017.json',
-        ann_file='training_labels/bedlam_train_refine.json',
-        data_prefix=dict(img='training_images'),
+        ann_file='annotations/person_keypoints_train2017.json',
+        data_prefix=dict(img='train2017/'),
         pipeline=train_pipeline,
     ))
 val_dataloader = dict(
@@ -212,8 +209,8 @@ val_dataloader = dict(
         data_root=data_root,
         data_mode=data_mode,
         ann_file='annotations/person_keypoints_val2017.json',
-        bbox_file=f'{data_root}person_detection_results/'
-        'COCO_val2017_detections_AP_H_56_person.json',
+        # bbox_file=f'{data_root}person_detection_results/'
+        # 'COCO_val2017_detections_AP_H_56_person.json',
         data_prefix=dict(img='val2017/'),
         test_mode=True,
         pipeline=val_pipeline,

@@ -120,7 +120,7 @@ backend_args = dict(backend='local')
 
 # pipelines
 train_pipeline = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
@@ -147,14 +147,14 @@ train_pipeline = [
     dict(type='PackPoseInputs')
 ]
 val_pipeline = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='TopdownAffine', input_size=codec['input_size']),
     dict(type='PackPoseInputs')
 ]
 
 train_pipeline_stage2 = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
@@ -224,7 +224,7 @@ dataset_bedlam = dict(
 
 # data loaders
 train_dataloader = dict(
-    batch_size=512,
+    batch_size=256,
     num_workers=8,
     # num_workers=2,
     # persistent_workers=True,
