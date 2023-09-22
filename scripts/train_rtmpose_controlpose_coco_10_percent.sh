@@ -5,7 +5,7 @@
 
 
 ./tools/dist_train.sh \
-configs/controlpose/rtmpose-l_8xb256-40e_controlpose_coco_0.01-256x192.py \
+configs/controlpose/rtmpose-l_8xb256-40e_controlpose_coco_0.1-256x192.py \
 8 \
 
 # ${CONFIG_FILE} ${GPU_NUM} [PY_ARGS]

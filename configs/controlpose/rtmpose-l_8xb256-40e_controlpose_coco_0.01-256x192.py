@@ -2,7 +2,7 @@ _base_ = ['../_base_/default_runtime.py']
 
 # runtime
 max_epochs = 40
-stage2_num_epochs = 35
+stage2_num_epochs = 8
 base_lr = 1e-3
 
 # hooks
@@ -151,14 +151,14 @@ train_pipeline = [
     dict(type='PackPoseInputs')
 ]
 val_pipeline = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='TopdownAffine', input_size=codec['input_size']),
     dict(type='PackPoseInputs')
 ]
 
 train_pipeline_stage2 = [
-    dict(type='LoadImage', backend_args=backend_args),
+    dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
@@ -188,6 +188,44 @@ train_pipeline_stage2 = [
     dict(type='PackPoseInputs')
 ]
 
+
+# train datasets
+dataset_coco_1_percent = dict(
+    type='RepeatDataset',
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_mode=data_mode,
+        ann_file='coco/annotations/person_keypoints_train2017_0.01.json',
+        data_prefix=dict(img='coco/train2017/'),
+        pipeline=[],
+    ),
+    times=3)
+
+dataset_controlpose = dict(
+    type='RepeatDataset',
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_mode=data_mode,
+        ann_file='controlpose/annotations/controlpose_pseudo.json',
+        data_prefix=dict(img='controlpose/images/'),
+        pipeline=[],
+    ),
+    times=1)
+
+dataset_bedlam = dict(
+    type='RepeatDataset',
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_mode=data_mode,
+        ann_file='bedlam/training_labels/bedlam_train_refine.json',
+        data_prefix=dict(img='bedlam/training_images/'),
+        pipeline=[],
+    ),
+    times=1)
+    
 # data loaders
 train_dataloader = dict(
     # batch_size=256,
@@ -197,18 +235,29 @@ train_dataloader = dict(
     # persistent_workers=True,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=True),
+    # dataset=dict(
+    #     type=dataset_type,
+    #     data_root=data_root,
+    #     data_mode=data_mode,
+    #     # ann_file='annotations/person_keypoints_train2017.json',
+    #     # ann_file='annotations/controlpose_train.json',
+    #     # ann_file='controlpose/annotations/coco_merge_all.json',
+    #     # ann_file='controlpose/annotations/controlnet_org.json',
+    #     ann_file='controlpose/annotations/controlpose_pseudo.json',
+    #     data_prefix=dict(img='controlpose/images'),
+    #     pipeline=train_pipeline,
+    # )
+    
     dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
-        data_mode=data_mode,
-        # ann_file='annotations/person_keypoints_train2017.json',
-        # ann_file='annotations/controlpose_train.json',
-        # ann_file='controlpose/annotations/coco_merge_all.json',
-        # ann_file='controlpose/annotations/controlnet_org.json',
-        ann_file='controlpose/annotations/controlpose_pseudo.json',
-        data_prefix=dict(img='controlpose/images'),
+        type='CombinedDataset',
+        metainfo=dict(from_file='configs/_base_/datasets/coco.py'),
+        # datasets=[dataset_coco, dataset_bedlam],
+        datasets=[dataset_controlpose, dataset_coco_1_percent],
         pipeline=train_pipeline,
-    ))
+        test_mode=False,
+    )
+    
+    )
 val_dataloader = dict(
     batch_size=256,
     num_workers=10,

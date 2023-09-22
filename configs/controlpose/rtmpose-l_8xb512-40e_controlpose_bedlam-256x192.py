@@ -246,7 +246,8 @@ train_dataloader = dict(
         datasets=[dataset_controlpose, dataset_bedlam],
         pipeline=train_pipeline,
         test_mode=False,
-    ))   
+    )
+    )   
      
 val_dataloader = dict(
     batch_size=512,
