@@ -226,7 +226,8 @@ dataset_bedlam = dict(
 
 # data loaders
 train_dataloader = dict(
-    batch_size=256,
+    # batch_size=256,
+    batch_size=512,
     num_workers=8,
     # num_workers=2,
     # persistent_workers=True,
@@ -252,7 +253,7 @@ train_dataloader = dict(
     )   
      
 val_dataloader = dict(
-    batch_size=512,
+    batch_size=256,
     num_workers=10,
     persistent_workers=True,
     drop_last=False,
