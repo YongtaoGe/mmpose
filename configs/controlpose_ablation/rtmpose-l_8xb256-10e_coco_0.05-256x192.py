@@ -1,8 +1,8 @@
 _base_ = ['../_base_/default_runtime.py']
 
 # runtime
-max_epochs = 20
-stage2_num_epochs = 5
+max_epochs = 10
+stage2_num_epochs = 7
 base_lr = 4e-3
 
 train_cfg = dict(max_epochs=max_epochs, val_interval=1)
