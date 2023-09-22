@@ -78,7 +78,7 @@ model = dict(
         init_cfg=dict(
             type='Pretrained',
             prefix='backbone.',
-            checkpoint='data/pretrain/cspnext-l_udp-aic-coco_210e-256x192-273b7631_20230130.pth'  # noqa
+            checkpoint='data/pretrain/cspnext-l_8xb256-rsb-a1-600e_in1k-6a760974.pth'  # noqa
         )),
     head=dict(
         type='RTMCCHead',

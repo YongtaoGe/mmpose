@@ -1,8 +1,8 @@
 _base_ = ['../_base_/default_runtime.py']
 
 # runtime
-max_epochs = 100
-stage2_num_epochs = 30
+max_epochs = 150
+stage2_num_epochs = 50
 base_lr = 4e-3
 
 # hooks
@@ -135,7 +135,7 @@ train_pipeline = [
             dict(type='MedianBlur', p=0.3),
             dict(
                 type='CoarseDropout',
-                max_holes=1,
+                max_holes=4,
                 max_height=0.4,
                 max_width=0.4,
                 min_holes=1,
@@ -146,6 +146,7 @@ train_pipeline = [
     dict(type='GenerateTarget', encoder=codec),
     dict(type='PackPoseInputs')
 ]
+
 val_pipeline = [
     dict(type='LoadImage', backend_args=backend_args, ignore_empty=True),
     dict(type='GetBBoxCenterScale'),
@@ -243,7 +244,7 @@ train_dataloader = dict(
         type='CombinedDataset',
         metainfo=dict(from_file='configs/_base_/datasets/coco.py'),
         # datasets=[dataset_coco, dataset_bedlam],
-        datasets=[dataset_controlpose, dataset_bedlam],
+        datasets=[dataset_controlpose, dataset_bedlam, dataset_coco],
         pipeline=train_pipeline,
         test_mode=False,
     )
