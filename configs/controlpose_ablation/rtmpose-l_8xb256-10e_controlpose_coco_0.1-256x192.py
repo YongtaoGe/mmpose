@@ -229,7 +229,7 @@ dataset_bedlam = dict(
 # data loaders
 train_dataloader = dict(
     # batch_size=256,
-    batch_size=512,
+    batch_size=256,
     # num_workers=10,
     num_workers=6,
     # persistent_workers=True,

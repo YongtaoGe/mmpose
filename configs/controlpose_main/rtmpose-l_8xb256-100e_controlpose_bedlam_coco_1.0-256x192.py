@@ -211,6 +211,7 @@ dataset_controlpose = dict(
     ),
     times=1)
 
+
 dataset_bedlam = dict(
     type='RepeatDataset',
     dataset=dict(
@@ -225,7 +226,7 @@ dataset_bedlam = dict(
 
 # data loaders
 train_dataloader = dict(
-    batch_size=512,
+    batch_size=256,
     num_workers=8,
     # num_workers=2,
     # persistent_workers=True,
