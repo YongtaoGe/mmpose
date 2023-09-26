@@ -194,7 +194,6 @@ class BaseCocoStyleDataset(BaseDataset):
 
     def _load_annotations(self) -> Tuple[List[dict], List[dict]]:
         """Load data from annotations in COCO format."""
-
         assert exists(self.ann_file), 'Annotation file does not exist'
 
         with get_local_path(self.ann_file) as local_path:
@@ -205,9 +204,7 @@ class BaseCocoStyleDataset(BaseDataset):
 
         instance_list = []
         image_list = []
-
-        # import pdb
-        # pdb.set_trace()
+        
         for img_id in self.coco.getImgIds():
             img = self.coco.loadImgs(img_id)[0]
             img.update({

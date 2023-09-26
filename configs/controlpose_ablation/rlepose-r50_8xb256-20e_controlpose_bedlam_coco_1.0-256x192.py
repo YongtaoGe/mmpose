@@ -125,6 +125,7 @@ train_dataloader = dict(
         metainfo=dict(from_file='configs/_base_/datasets/coco.py'),
         # datasets=[dataset_coco, dataset_bedlam],
         datasets=[dataset_controlpose, dataset_bedlam, dataset_coco],
+        sample_ratio_factor=[0.3, 0.3, 0.9],
         pipeline=train_pipeline,
         test_mode=False,
     )

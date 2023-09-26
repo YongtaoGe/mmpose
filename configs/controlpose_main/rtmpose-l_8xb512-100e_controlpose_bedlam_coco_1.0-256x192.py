@@ -288,8 +288,60 @@ custom_hooks = [
         switch_pipeline=train_pipeline_stage2)
 ]
 
+ochuman_coco = [
+    (0, 0),
+    (1, 1),
+    (2, 2),
+    (3, 3),
+    (4, 4),
+    (5, 5),
+    (6, 6),
+    (7, 7),
+    (8, 8),
+    (9, 9),
+    (10, 10),
+    (11, 11),
+    (12, 12),
+    (13, 13),
+    (14, 14),
+    (15, 15),
+    (16, 16),
+]
+
+val_ochuman = dict(
+    type='OCHumanDataset',
+    data_root=data_root,
+    data_mode=data_mode,
+    ann_file='ochuman/annotations/'
+    'ochuman_coco_format_val_range_0.00_1.00.json',
+    data_prefix=dict(img='ochuman/images/'),
+    pipeline=[
+        dict(type='KeypointConverter', num_keypoints=17, mapping=ochuman_coco)
+    ],
+)
+
+test_dataloader = dict(
+    batch_size=64,
+    num_workers=10,
+    persistent_workers=True,
+    drop_last=False,
+    sampler=dict(type='DefaultSampler', shuffle=False, round_up=False),
+    dataset=dict(
+        type='CombinedDataset',
+        metainfo=dict(from_file='configs/_base_/datasets/coco.py'),
+        datasets=[
+            # val_coco,
+            val_ochuman,
+        ],
+        pipeline=val_pipeline,
+        test_mode=True,
+    ))
+
 # evaluators
 val_evaluator = dict(
     type='CocoMetric',
     ann_file=data_root + 'coco/annotations/person_keypoints_val2017.json')
-test_evaluator = val_evaluator
+# test_evaluator = val_evaluator
+test_evaluator = dict(
+    type='CocoMetric',
+    ann_file=data_root + 'ochuman/annotations/ochuman_coco_format_val_range_0.00_1.00.json')
